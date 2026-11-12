@@ -41,6 +41,9 @@ Push to `main` or run **Prepare Pioneer application** manually. The workflow:
 5. Verifies both artifacts against the same app manifest, lockfile, assets and
    source commit; combines them into one directory and uploads
    `pioneer-terminal.tar.gz` in the **pioneer-terminal** Actions artifact.
+6. Before publishing, verifies every archive file's content, size and executable
+   mode, checks native ELF architecture and enforces the size budget. This static
+   artifact verification never starts the backend or executes its binaries.
 
 The workflow performs builds and artifact-integrity checks, not unit/browser/
 runtime tests. A green workflow alone does not qualify Wry, Microsandbox, HTTP/WS
@@ -104,6 +107,7 @@ Download the two individual Actions artifacts into
 
 ```sh
 bun run assemble:pioneer
+python3 scripts/pioneer/verify-package.py
 ```
 
 To use another download directory:
@@ -174,3 +178,9 @@ The next App-runtime implementation must adopt or revise these candidate fields,
 add authenticated client routing, qualify the pinned runtime image and test the real
 HTTP/WS/PTY path. It must not change the already-running minimal Apps task just to
 accept this preview directory.
+
+For the concrete installation/launch requirements derived from Terminal, see
+[Gateway runtime requirements](gateway-runtime-requirements.md). NFT reports the
+optional ws accelerators `bufferutil` and `utf-8-validate` as absent; ws provides
+fallbacks and these are deliberately not runtime requirements. Other unresolved
+custom-server dependencies fail packaging instead of being silently accepted.

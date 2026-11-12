@@ -38,6 +38,20 @@ export async function copyRuntimeDependencies(runtime, reportPath) {
     ignore: ["node_modules/next/**", "node_modules/@next/**"],
   });
   const selected = new Set(trace.fileList);
+  const warnings = [...trace.warnings].map((warning) => warning.message);
+  // ws catches these optional acceleration imports and provides JS/Node
+  // fallbacks. Any other unresolved dependency is a packaging failure.
+  const unexpected = warnings.filter(
+    (message) =>
+      !/^Failed to resolve dependency "(?:bufferutil|utf-8-validate)":/.test(
+        message,
+      ) || !message.includes("/node_modules/ws/lib/"),
+  );
+  if (unexpected.length) {
+    throw new Error(
+      `Unresolved custom server dependencies:\n${unexpected.join("\n")}`,
+    );
+  }
   // Native addon loading is dynamic. Declare the Linux artifact explicitly.
   selected.add("node_modules/node-pty/build/Release/pty.node");
   selected.add("node_modules/node-pty/package.json");
@@ -77,6 +91,7 @@ export async function copyRuntimeDependencies(runtime, reportPath) {
     customServerFiles: copied,
     // NFT can report optional/foreign-platform imports. Keep its diagnostics
     // visible for source review; never call static tracing runtime validation.
-    warnings: [...trace.warnings].map((warning) => warning.message),
+    warnings,
+    optionalDependencyWarnings: ["bufferutil", "utf-8-validate"],
   });
 }

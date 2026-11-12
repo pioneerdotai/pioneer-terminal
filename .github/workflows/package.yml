@@ -73,6 +73,8 @@ jobs:
           path: dist/pioneer-targets
       - name: Assemble and checksum both architecture artifacts
         run: node scripts/pioneer/assemble.mjs
+      - name: Verify archive contents, native targets and size budget
+        run: python3 scripts/pioneer/verify-package.py
       - name: Archive the combined directory with its relative layout
         run: tar -czf dist/pioneer-terminal.tar.gz -C dist/pioneer .
       - uses: actions/upload-artifact@v4

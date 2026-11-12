@@ -27,8 +27,8 @@ serialized standalone config to the custom server. There is no dependency on
 Push to `main` or run **Prepare Pioneer application** manually. The workflow:
 
 1. Runs native `linux-x64` and `linux-arm64` builders independently.
-2. Uses a digest-pinned Debian Bookworm Node.js 22 container on each runner, keeping the native
-   addon glibc baseline consistent with the runtime candidate. This Docker
+2. Uses a digest-pinned full Debian Bookworm Node.js 22 build container on each runner, keeping the native
+   addon glibc baseline consistent with the separate slim runtime candidate. This Docker
    container is **only a CI build tool**, not a Gateway execution provider.
 3. Installs from `bun.lock` with scripts disabled, builds the UI and server, and
    explicitly rebuilds `node-pty` for the builder's Linux architecture and Node ABI.
@@ -143,9 +143,11 @@ clearly rather than install Node on the host or run the App directly.
 
 ## Candidate runtime contract to qualify next
 
-- Provider: Microsandbox only. Candidate base image: `node:22-bookworm` with the
+- Provider: Microsandbox only. Candidate runtime image: `node:22-bookworm-slim` with the
   immutable OCI index and architecture digests in `packaging/runtime-image.json`.
-  The workflow uses that same pinned index. The future integration must check
+  CI intentionally uses a separate full Bookworm builder with the same Node 22/glibc baseline.
+  The slim Debian base includes Bash and perl-base; no apt/npm install is needed during preview.
+  The future integration must check
   actual Node ABI and required commands and qualify this image with Microsandbox;
   it must not silently select a mutable tag or a runtime from host PATH.
 - Select exactly one matching architecture archive and extract it in the App's
@@ -184,3 +186,5 @@ For the concrete installation/launch requirements derived from Terminal, see
 optional ws accelerators `bufferutil` and `utf-8-validate` as absent; ws provides
 fallbacks and these are deliberately not runtime requirements. Other unresolved
 custom-server dependencies fail packaging instead of being silently accepted.
+
+For the manual loopback-only trial, see [Local Microsandbox preview](local-microsandbox-preview.md).

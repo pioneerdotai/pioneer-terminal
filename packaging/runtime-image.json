@@ -1,9 +1,9 @@
 {
-  "image": "node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb",
+  "image": "node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee",
   "platformDigests": {
-    "linux-x64": "sha256:69c6e263db01e9946c7743bbbe9f7b1ba0df384d27ec09e08e5832d6acd3daf3",
-    "linux-arm64": "sha256:f796bda8a91392fe7b5c974ff42abaa5cc801eb6987dca967f1db8be493e0ee3"
+    "linux-x64": "sha256:47725aca53d3295ec2d3be8f62726599b3033cc262edc2c7e429909b3ac599fc",
+    "linux-arm64": "sha256:1ee7b5f35129c6f4af835661a7a3cfbdd4748944c23b05567aa6ec00c6689e46"
   },
-  "source": "Docker Official Image library/node, 22-bookworm",
-  "purpose": "Candidate image pinned for author-side qualification; not yet a Gateway runtime declaration"
+  "source": "Docker Official Image library/node, 22-bookworm-slim",
+  "purpose": "Pinned execution image candidate. The separate CI builder intentionally uses full Bookworm; both target Node 22/glibc."
 }

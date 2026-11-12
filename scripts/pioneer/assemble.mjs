@@ -87,12 +87,12 @@ for (const build of builds) {
 await writeJson(join(output, "runtime.proposal.json"), {
   status: "developer-preview-not-an-installed-runtime-contract",
   provider: "microsandbox",
-  imageCandidate: "node:22-bookworm",
+  imageCandidate: "node:22-bookworm-slim",
   image: image.image,
   imageDigest: image.image.split("@")[1],
   platformImageDigests: image.platformDigests,
   imageDigestStatus:
-    "pinned-for-author-build; Microsandbox qualification pending",
+    "pinned-slim-runtime; separate-full-CI-builder; Microsandbox qualification pending",
   guest: { os: "linux", libc: "glibc", distribution: "debian-bookworm" },
   archiveRoot: "runtime",
   command: ["node", "start.cjs"],
@@ -117,7 +117,7 @@ await writeFile(
   join(output, "INSTALLATION-NOTES.txt"),
   "Developer preview for the FUTURE Gateway runtime. Not installable by the current minimal Apps parser.\n" +
     "Select one Linux architecture archive, extract in the app package, provide Node.js 22 via Microsandbox, attach persistent data and inject the documented Gateway environment/header.\n" +
-    "Resolve/pin the image digest and validate its Node ABI before execution. Never install dependencies or build this package on the Gateway.\n" +
+    "Use the pinned slim runtime image and validate its Node ABI before execution. Never install dependencies or build this package on the Gateway.\n" +
     "The terminal shell runs inside the sandbox, not on the Gateway host or client. Live PTYs do not survive backend restart.\n",
 );
 const { fileIndex } = await import("./common.mjs");

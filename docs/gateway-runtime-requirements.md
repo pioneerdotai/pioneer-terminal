@@ -30,6 +30,9 @@ from the developer checkout.
 - Microsandbox on the Gateway is mandatory. There is no direct-host process,
   system Node/Python or Docker execution fallback. CI containers build artifacts
   only and are not involved in Gateway operation.
+- The execution image candidate is pinned node:22-bookworm-slim. The full
+  node:22-bookworm image is only the CI builder; do not use its digest as the
+  installed runtime just because compilation happened there.
 - Extract the selected archive. Its root is `runtime/`; execute
   `node start.cjs` there. The launcher checks platform, architecture and Node ABI.
   It applies production mode and Next's serialized production config before

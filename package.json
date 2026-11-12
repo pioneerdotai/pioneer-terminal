@@ -11,6 +11,7 @@
     "build:pioneer": "node scripts/pioneer/build.mjs",
     "package:pioneer": "node scripts/pioneer/package.mjs",
     "assemble:pioneer": "node scripts/pioneer/assemble.mjs",
+    "preview:microsandbox": "node scripts/pioneer/preview.mjs",
     "start": "NODE_ENV=production node --import tsx server.ts",
     "lint": "eslint --max-warnings=0",
     "type-check": "tsc --noEmit",

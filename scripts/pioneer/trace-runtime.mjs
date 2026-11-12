@@ -6,9 +6,10 @@ import { root, writeJson } from "./common.mjs";
 const require = createRequire(join(root, "package.json"));
 // Next is pinned. Reuse the same tracer as this exact Next build, not a second
 // independently versioned framework/packager dependency.
-const { nodeFileTrace } = require("next/dist/compiled/@vercel/nft");
-
 export async function copyRuntimeDependencies(runtime, reportPath) {
+  // The assemble job imports package metadata helpers without installing Next.
+  // Load build-only tools only when actually producing a runtime artifact.
+  const { nodeFileTrace } = require("next/dist/compiled/@vercel/nft");
   const canonicalRoot = await realpath(root);
   const standalone = join(root, ".next/standalone/node_modules");
   if (!(await lstat(standalone)).isDirectory()) {

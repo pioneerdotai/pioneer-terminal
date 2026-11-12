@@ -15,25 +15,29 @@ Microsandbox and executes the ready `runtime/start.cjs`.
 
 `next start` and the default Next standalone server do not implement this
 application's terminal WebSocket/PTY backend. We bundle `server.ts` plus its local
-imports into `server.cjs`, with npm dependencies external, and package those
-dependencies explicitly. There is no dependency on `tsx` or Bun during execution.
+imports into `server.cjs`, with npm dependencies external. We use only the traced
+production dependencies from Next's standalone output, then add the custom
+server's `ws` and `node-pty` file closure using Next's pinned Node File Trace tool.
+The generated standalone `server.js` is not executed; our launcher supplies Next's
+serialized standalone config to the custom server. There is no dependency on
+`tsx` or Bun during execution and no wholesale copy of production node_modules.
 
 ## GitHub Actions
 
 Push to `main` or run **Prepare Pioneer application** manually. The workflow:
 
 1. Runs native `linux-x64` and `linux-arm64` builders independently.
-2. Uses a Debian Bookworm Node.js 22 container on each runner, keeping the native
+2. Uses a digest-pinned Debian Bookworm Node.js 22 container on each runner, keeping the native
    addon glibc baseline consistent with the runtime candidate. This Docker
    container is **only a CI build tool**, not a Gateway execution provider.
-3. Installs from `bun.lock` with scripts disabled, builds the UI and server, then
-   creates an isolated production dependency installation with automatic peer
-   installation omitted (runtime peers such as React are explicit dependencies).
-   It rejects leaked Playwright/TypeScript/tsx/lint tools. It explicitly rebuilds
-   `node-pty` for the builder's Linux architecture and Node ABI.
-4. Materializes dependency symlinks into package files, checks the PTY ELF target,
-   omits development dependencies and Next cache, and produces a tar archive with
-   Linux permissions and per-file hashes.
+3. Installs from `bun.lock` with scripts disabled, builds the UI and server, and
+   explicitly rebuilds `node-pty` for the builder's Linux architecture and Node ABI.
+4. Copies Next's production file closure and traces the custom server separately.
+   Materializes dependency symlinks, checks the PTY ELF target, and rejects leaked
+   compiler/dev tools or musl binaries in this glibc package. Next caches and the
+   duplicate standalone tree are omitted. A 100 MiB unpacked-runtime budget catches
+   regressions; exceeding it fails the build rather than deleting arbitrary files.
+   Produces a tar archive with Linux permissions, per-file hashes and trace/size reports.
 5. Verifies both artifacts against the same app manifest, lockfile, assets and
    source commit; combines them into one directory and uploads
    `pioneer-terminal.tar.gz` in the **pioneer-terminal** Actions artifact.
@@ -65,11 +69,15 @@ terminal-0.1.0/
     terminal-0.1.0-linux-arm64.tar.gz
     linux-x64.files.json
     linux-arm64.files.json
+    linux-x64.dependency-trace.json
+    linux-arm64.dependency-trace.json
+    linux-x64.packaging-stats.json
+    linux-arm64.packaging-stats.json
 ```
 
 Each architecture archive contains `runtime/`: `start.cjs`, bundled `server.cjs`,
 `runtime-target.json`, `.next/`, `public/`, `next.config.mjs`, `package.json`, and
-production `node_modules/`. No original source checkout or development dependency
+the selected runtime subset of `node_modules/`. No original source checkout or development dependency
 installation is needed to execute it. Terminal currently declares no Skill/MCP;
 the original finance scratch files remain local and are excluded from Git and
 packaging. The current icon is the PNG already embedded in the starter favicon,
@@ -131,10 +139,11 @@ clearly rather than install Node on the host or run the App directly.
 
 ## Candidate runtime contract to qualify next
 
-- Provider: Microsandbox only. Candidate base image: `node:22-bookworm`, not a
-  mutable `latest` language selection from host PATH. The image **digest is not
-  yet pinned**; the future integration must resolve/pin it and check actual Node
-  ABI and required commands. It must not execute this preview blindly.
+- Provider: Microsandbox only. Candidate base image: `node:22-bookworm` with the
+  immutable OCI index and architecture digests in `packaging/runtime-image.json`.
+  The workflow uses that same pinned index. The future integration must check
+  actual Node ABI and required commands and qualify this image with Microsandbox;
+  it must not silently select a mutable tag or a runtime from host PATH.
 - Select exactly one matching architecture archive and extract it in the App's
   runtime area. Start `node start.cjs` with working directory `runtime/`.
 - Provide an app-private persistent directory in `PIONEER_APP_DATA`. The launcher
@@ -162,6 +171,6 @@ clearly rather than install Node on the host or run the App directly.
   in-memory PTYs/tokens; persistent HOME is not a live-process snapshot.
 
 The next App-runtime implementation must adopt or revise these candidate fields,
-add authenticated client routing, pin/qualify the runtime image and test the real
+add authenticated client routing, qualify the pinned runtime image and test the real
 HTTP/WS/PTY path. It must not change the already-running minimal Apps task just to
 accept this preview directory.

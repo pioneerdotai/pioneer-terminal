@@ -31,7 +31,8 @@ not `localhost` under a different origin.
 
 This preview deliberately has **no Gateway HTTP header authentication** and is
 for a trusted local development machine only. `packaging/local-preview.cjs` is
-copied separately by this developer helper and is NOT in production artifacts.
+added to the temporary runtime tree before its single copy into the VM and is
+NOT in production artifacts.
 The real `runtime/start.cjs` still requires the Gateway token/origin/data contract;
 its checks were not relaxed. This helper is not an alternative Gateway runtime.
 

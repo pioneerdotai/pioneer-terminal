@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { machine } from "node:os";
 import { join } from "node:path";
 import { json, option, packagePath, root, run } from "./common.mjs";
@@ -46,6 +46,12 @@ const data = join(root, "dist/microsandbox-preview-data", arch);
 await mkdir(join(data, "home"), { recursive: true });
 try {
   await run("tar", ["-xzf", archive, "-C", stage]);
+  // Submit one complete tree: separate nested copy patches can create the
+  // destination before msb applies --copy-dir, which then rejects the collision.
+  await copyFile(
+    join(root, "packaging/local-preview.cjs"),
+    join(stage, "runtime/local-preview.cjs"),
+  );
   const args = [
     "run",
     "--no-tty",
@@ -60,8 +66,6 @@ try {
     `127.0.0.1:${port}:3000`,
     "--copy-dir",
     `${join(stage, "runtime")}:/app/runtime`,
-    "--copy-file",
-    `${join(root, "packaging/local-preview.cjs")}:/app/runtime/local-preview.cjs`,
     "--mount-dir",
     `${data}:/data`,
     "--workdir",

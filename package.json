@@ -7,7 +7,7 @@
     "dev": "node --import tsx server.ts",
     "prebuild": "node scripts/prepare-assets.mjs",
     "build": "next build",
-    "build:server": "bun build server.ts --target=node --format=cjs --packages=external --outfile=build/server.cjs",
+    "build:server": "bun build server.ts --target=node --format=cjs --packages=external --define 'process.env.NODE_ENV=\"production\"' --outfile=build/server.cjs",
     "build:pioneer": "node scripts/pioneer/build.mjs",
     "package:pioneer": "node scripts/pioneer/package.mjs",
     "assemble:pioneer": "node scripts/pioneer/assemble.mjs",

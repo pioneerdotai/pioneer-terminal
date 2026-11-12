@@ -22,6 +22,11 @@ The generated standalone `server.js` is not executed; our launcher supplies Next
 serialized standalone config to the custom server. There is no dependency on
 `tsx` or Bun during execution and no wholesale copy of production node_modules.
 
+The custom server bundle explicitly defines `process.env.NODE_ENV` as
+`"production"`. Bun substitutes this expression while bundling; setting the
+environment only in the runtime launcher cannot correct a bundle already built
+with development mode enabled. Source development still uses `server.ts` directly.
+
 ## GitHub Actions
 
 Push to `main` or run **Prepare Pioneer application** manually. The workflow:

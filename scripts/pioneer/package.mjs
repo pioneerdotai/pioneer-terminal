@@ -12,6 +12,7 @@ import {
   rm,
 } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
+import { copyRuntimeDependencies } from "./trace-runtime.mjs";
 import {
   fileIndex,
   json,
@@ -103,70 +104,20 @@ async function main() {
   const output = join(root, "dist/pioneer-targets", target);
   try {
     const runtime = join(temporary, "payload/runtime");
-    const deps = join(temporary, "dependencies");
     await mkdir(runtime, { recursive: true });
-    await mkdir(deps);
-    for (const file of ["package.json", "bun.lock"]) {
-      await cp(join(root, file), join(deps, file));
-    }
-    // This is author/CI packaging. No package manager will run on the Gateway.
-    await run(
-      "bun",
-      [
-        "install",
-        "--production",
-        "--omit=peer",
-        "--frozen-lockfile",
-        "--ignore-scripts",
-      ],
-      deps,
-    );
-    await run("npm", ["rebuild", "node-pty", "--build-from-source"], deps, {
+    // Author/CI only: compile the addon before tracing its runtime file closure.
+    await run("npm", ["rebuild", "node-pty", "--build-from-source"], root, {
       npm_config_build_from_source: "true",
     });
-    const modules = join(deps, "node_modules");
-    // Next's optional Playwright peer can otherwise reintroduce the root dev
-    // dependency even with --production. Explicit runtime dependencies remain.
-    for (const name of [
-      "@playwright/test",
-      "playwright",
-      "playwright-core",
-      "tsx",
-      "typescript",
-      "eslint",
-      "prettier",
-    ]) {
-      try {
-        await lstat(join(modules, name));
-      } catch (error) {
-        if (error.code === "ENOENT") continue;
-        throw error;
-      }
-      throw new Error(`Developer-only dependency leaked into runtime: ${name}`);
-    }
-    const canonicalModules = await realpath(modules);
-    // Materialize package-manager symlinks, but never follow links out of this
-    // isolated production install. No developer node_modules is copied.
-    await cp(modules, join(runtime, "node_modules"), {
-      recursive: true,
-      dereference: true,
-      async filter(source) {
-        const actual = await realpath(source);
-        if (
-          actual !== canonicalModules &&
-          !actual.startsWith(`${canonicalModules}${sep}`)
-        ) {
-          throw new Error(
-            `Dependency symlink escapes production install: ${source}`,
-          );
-        }
-        return true;
-      },
-    });
+    await copyRuntimeDependencies(
+      runtime,
+      join(temporary, "dependency-trace.json"),
+    );
     for (const entry of await readdir(join(root, ".next"))) {
       await mkdir(join(runtime, ".next"), { recursive: true });
       if (
         [
+          "standalone",
           "cache",
           "dev",
           "diagnostics",
@@ -197,7 +148,12 @@ async function main() {
       version: info.pkg.version,
       private: true,
       scripts: { start: "node start.cjs" },
-      dependencies: info.pkg.dependencies,
+      dependencies: Object.fromEntries(
+        ["next", "ws", "node-pty"].map((name) => [
+          name,
+          info.pkg.dependencies[name],
+        ]),
+      ),
     });
     const elf = await readFile(
       join(runtime, "node_modules/node-pty/build/Release/pty.node"),
@@ -212,11 +168,31 @@ async function main() {
     }
     const release = join(temporary, "release");
     await mkdir(release);
-    const archive = `${info.app.slug}-${info.app.version}-${target}.tar.gz`;
-    await writeJson(
-      join(release, "files.json"),
-      await fileIndex(join(temporary, "payload")),
+    await cp(
+      join(temporary, "dependency-trace.json"),
+      join(release, "dependency-trace.json"),
     );
+    const archive = `${info.app.slug}-${info.app.version}-${target}.tar.gz`;
+    const entries = await fileIndex(join(temporary, "payload"));
+    const unpackedBytes = entries.reduce(
+      (total, entry) => total + entry.size,
+      0,
+    );
+    if (unpackedBytes > 100 * 1024 * 1024) {
+      throw new Error(
+        `Runtime exceeded 100 MiB: ${unpackedBytes} bytes; inspect the trace, do not blindly prune it`,
+      );
+    }
+    await writeJson(join(release, "files.json"), entries);
+    await writeJson(join(release, "packaging-stats.json"), {
+      files: entries.length,
+      unpackedBytes,
+      dependenciesBytes: entries
+        .filter((entry) => entry.path.startsWith("runtime/node_modules/"))
+        .reduce((total, entry) => total + entry.size, 0),
+      nativePtyBytes: elf.length,
+      nodeRuntimeIncluded: false,
+    });
     // GNU tar in the Debian builder preserves Linux executable modes.
     await run("tar", [
       "--sort=name",
@@ -249,6 +225,8 @@ async function main() {
         ),
       ),
       archive,
+      unpackedBytes,
+      runtimeFileCount: entries.length,
       archiveSha256: await sha256(join(release, archive)),
       sourceCommit: process.env.GITHUB_SHA ?? null,
     });

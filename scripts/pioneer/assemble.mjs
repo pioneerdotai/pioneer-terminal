@@ -5,6 +5,7 @@ import { copyMetadata, metadata, sha256 } from "./package.mjs";
 
 const input = resolve(option("--input") ?? join(root, "dist/pioneer-targets"));
 const info = await metadata();
+const image = await json(join(root, "packaging/runtime-image.json"));
 const output = join(
   root,
   "dist/pioneer",
@@ -69,7 +70,17 @@ for (const build of builds) {
     node: build.node,
     nodeModulesABI: build.nodeModulesABI,
     sourceCommit: build.sourceCommit,
+    unpackedBytes: build.unpackedBytes,
+    runtimeFileCount: build.runtimeFileCount,
+    dependencyTrace: `runtime-artifacts/${build.target}.dependency-trace.json`,
+    packagingStats: `runtime-artifacts/${build.target}.packaging-stats.json`,
   };
+  for (const name of ["dependency-trace", "packaging-stats"]) {
+    await cp(
+      join(build.directory, `${name}.json`),
+      join(output, "runtime-artifacts", `${build.target}.${name}.json`),
+    );
+  }
 }
 // Deliberately outside app.json: future runtime schema is NOT yet agreed or
 // supported by the minimal Apps installer. This is a developer handoff only.
@@ -77,9 +88,11 @@ await writeJson(join(output, "runtime.proposal.json"), {
   status: "developer-preview-not-an-installed-runtime-contract",
   provider: "microsandbox",
   imageCandidate: "node:22-bookworm",
-  imageDigest: null,
+  image: image.image,
+  imageDigest: image.image.split("@")[1],
+  platformImageDigests: image.platformDigests,
   imageDigestStatus:
-    "must-be-resolved-and-pinned-by-future-runtime-integration",
+    "pinned-for-author-build; Microsandbox qualification pending",
   guest: { os: "linux", libc: "glibc", distribution: "debian-bookworm" },
   archiveRoot: "runtime",
   command: ["node", "start.cjs"],

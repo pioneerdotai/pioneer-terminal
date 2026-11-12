@@ -44,4 +44,9 @@ process.env.SHELL ??= "/bin/bash";
 process.env.HOST ??= "0.0.0.0";
 process.env.PORT ??= "3000";
 process.chdir(__dirname);
+// Use the exact production config serialized by Next's standalone build.
+// The generated standalone server is NOT used: server.cjs owns HTTP/WS/PTY.
+process.env.__NEXT_PRIVATE_STANDALONE_CONFIG = JSON.stringify(
+  require("./.next/required-server-files.json").config,
+);
 require("./server.cjs");

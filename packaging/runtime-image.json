@@ -1,0 +1,9 @@
+{
+  "image": "node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb",
+  "platformDigests": {
+    "linux-x64": "sha256:69c6e263db01e9946c7743bbbe9f7b1ba0df384d27ec09e08e5832d6acd3daf3",
+    "linux-arm64": "sha256:f796bda8a91392fe7b5c974ff42abaa5cc801eb6987dca967f1db8be493e0ee3"
+  },
+  "source": "Docker Official Image library/node, 22-bookworm",
+  "purpose": "Candidate image pinned for author-side qualification; not yet a Gateway runtime declaration"
+}

@@ -1,13 +1,14 @@
 import { spawn } from "node:child_process";
 import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { machine } from "node:os";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { json, option, packagePath, root, run } from "./common.mjs";
 import { sha256 } from "./package.mjs";
 
 if (process.argv.includes("--help")) {
   console.log(
-    "bun run preview:microsandbox [--port 3000]\nUses existing built artifacts and msb 0.7.14 CLI. Never builds the App or installs dependencies. App launch only happens when you run this command.",
+    "bun run preview:microsandbox [--port 3000]\nUI runs in msb 0.7.14; shell sessions run on this computer. Uses existing built artifacts and local developer dependencies (tsx, ws, node-pty). Never builds or installs dependencies. Launch only happens when you run this command.",
   );
   process.exit(0);
 }
@@ -44,6 +45,7 @@ await run("msb", ["--version"]);
 const stage = await mkdtemp(join(root, "dist/.terminal-preview-"));
 const data = join(root, "dist/microsandbox-preview-data", arch);
 await mkdir(join(data, "home"), { recursive: true });
+let preview;
 try {
   await run("tar", ["-xzf", archive, "-C", stage]);
   // Submit one complete tree: separate nested copy patches can create the
@@ -52,6 +54,11 @@ try {
     join(root, "packaging/local-preview.cjs"),
     join(stage, "runtime/local-preview.cjs"),
   );
+  // Reuse the source PTY/session implementation under developer Node, without
+  // starting Next on the host or adding this helper to production artifacts.
+  const { require: tsRequire } = createRequire(import.meta.url)("tsx/cjs/api");
+  const { startHostPreview } = tsRequire("./host-preview.ts", import.meta.url);
+  preview = await startHostPreview(port);
   const args = [
     "run",
     "--no-tty",
@@ -63,7 +70,7 @@ try {
     "--net",
     "public",
     "--port",
-    `127.0.0.1:${port}:3000`,
+    `127.0.0.1:${preview.upstreamPort}:3000`,
     "--copy-dir",
     `${join(stage, "runtime")}:/app/runtime`,
     "--mount-dir",
@@ -94,7 +101,7 @@ try {
     "Wait for 'Local Terminal ready', then open that exact URL. Ctrl+C stops the preview.",
   );
   console.log(
-    "Shells run inside Microsandbox. Only the preview data directory is mounted from the host.",
+    "UI runs inside Microsandbox; terminal sessions run on this computer with your user account, HOME and shell.",
   );
   console.log(
     "No Gateway header authentication is exercised in this loopback-only developer mode.\n",
@@ -107,9 +114,13 @@ try {
       detached: process.platform !== "win32",
     });
     const interrupt = () => {
+      void preview.close();
       if (process.platform !== "win32") child.kill("SIGINT");
     };
-    const terminate = () => child.kill("SIGTERM");
+    const terminate = () => {
+      void preview.close();
+      child.kill("SIGTERM");
+    };
     process.on("SIGINT", interrupt);
     process.on("SIGTERM", terminate);
     const release = () => {
@@ -127,5 +138,6 @@ try {
     });
   });
 } finally {
+  await preview?.close();
   await rm(stage, { recursive: true, force: true });
 }

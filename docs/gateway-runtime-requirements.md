@@ -3,6 +3,17 @@
 This is an application-derived handoff, not a request to expand the current
 minimal Apps implementation and not an approved new manifest schema.
 
+**Host-terminal correction:** the intended shell runs on the Gateway machine as
+the authorized host user, not in the App's Linux guest. The current standalone
+payload below still contains its original guest PTY backend. Developer preview
+now demonstrates the intended routing: HTTP UI to Microsandbox, `/api/terminal`
+WebSocket to a host service reusing the session protocol. Gateway must provide
+that host PTY service and client authorization before this is a full installation.
+Statements below about guest shell HOME/Bash/Perl describe the existing payload,
+not the required host-terminal behavior. `node-pty` and platform dependencies
+ultimately belong on the host service side; no host runtime installation or
+guest-to-host shell bridge should be added to the App installer as a workaround.
+
 The developer's only delivery operation is **Prepare Pioneer application** in
 GitHub Actions (also triggered by pushing main). The result is one directory with
 App metadata, two prebuilt runtime artifacts and their integrity/size reports.

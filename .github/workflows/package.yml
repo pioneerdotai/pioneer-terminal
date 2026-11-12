@@ -1,0 +1,84 @@
+name: Prepare Pioneer application
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pioneer-package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime:
+    name: Build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: linux-x64
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+    runs-on: ${{ matrix.runner }}
+    # Build native addons against the runtime candidate's glibc, not the
+    # Ubuntu runner's newer libc. Nothing is compiled in Microsandbox.
+    container: node:22-bookworm
+    timeout-minutes: 30
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare developer build toolchain
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends python3 make g++ pkg-config perl ca-certificates unzip
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.3"
+      - name: Install locked developer dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Build UI and custom server
+        run: bun run build:pioneer
+      - name: Package production dependencies and native PTY
+        run: bun run package:pioneer
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist/pioneer-targets/${{ matrix.target }}/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  assemble:
+    name: Assemble application directory
+    needs: runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: linux-*
+          path: dist/pioneer-targets
+      - name: Assemble and checksum both architecture artifacts
+        run: node scripts/pioneer/assemble.mjs
+      - name: Archive the combined directory with its relative layout
+        run: tar -czf dist/pioneer-terminal.tar.gz -C dist/pioneer .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pioneer-terminal
+          path: dist/pioneer-terminal.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30

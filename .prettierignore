@@ -1,0 +1,13 @@
+# Generated files and build/test output
+.next/
+out/
+build/
+dist/
+coverage/
+test-results/
+playwright-report/
+next-env.d.ts
+*.tsbuildinfo
+
+# Managed by Bun
+bun.lock

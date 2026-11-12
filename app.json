@@ -1,0 +1,28 @@
+{
+  "name": "Terminal",
+  "version": "0.1.0",
+  "slug": "terminal",
+  "license": "MIT",
+  "shortDescription": "Terminal sessions in your Pioneer application environment.",
+  "longDescription": "A web terminal with tabs, split panes and reconnectable shell sessions. The shell runs inside the application's environment on the Gateway. Desktop and mobile clients display its interface through their WebView.",
+  "categories": ["development"],
+  "icon": {
+    "light": "./assets/logo.png",
+    "dark": "./assets/logo.png"
+  },
+  "composerIcon": {
+    "light": "./assets/logo.png",
+    "dark": "./assets/logo.png"
+  },
+  "developer": {
+    "name": "Pioneer",
+    "logo": {
+      "light": "./assets/logo.png",
+      "dark": "./assets/logo.png"
+    },
+    "url": "https://getpioneer.dev"
+  },
+  "websiteURL": "https://getpioneer.dev",
+  "supportURL": "https://github.com/pioneerdotai/pioneer-terminal/issues",
+  "repositoryURL": "https://github.com/pioneerdotai/pioneer-terminal"
+}

@@ -1,0 +1,53 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+/dist/
+/.pioneer-stage-*/
+
+# Undeclared scratch examples inherited from the initial manifest experiment.
+# They remain local and are not part of Terminal or its release artifacts.
+/mcp.json
+/skills/terminal/
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files
+.env*
+
+# wasm build artifact
+/public/ghostty-vt.wasm
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# browser test output
+/test-results/
+/playwright-report/

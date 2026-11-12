@@ -27,7 +27,9 @@ Push to `main` or run **Prepare Pioneer application** manually. The workflow:
    addon glibc baseline consistent with the runtime candidate. This Docker
    container is **only a CI build tool**, not a Gateway execution provider.
 3. Installs from `bun.lock` with scripts disabled, builds the UI and server, then
-   creates an isolated production dependency installation. It explicitly rebuilds
+   creates an isolated production dependency installation with automatic peer
+   installation omitted (runtime peers such as React are explicit dependencies).
+   It rejects leaked Playwright/TypeScript/tsx/lint tools. It explicitly rebuilds
    `node-pty` for the builder's Linux architecture and Node ABI.
 4. Materializes dependency symlinks into package files, checks the PTY ELF target,
    omits development dependencies and Next cache, and produces a tar archive with

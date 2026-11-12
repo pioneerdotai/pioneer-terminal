@@ -112,13 +112,38 @@ async function main() {
     // This is author/CI packaging. No package manager will run on the Gateway.
     await run(
       "bun",
-      ["install", "--production", "--frozen-lockfile", "--ignore-scripts"],
+      [
+        "install",
+        "--production",
+        "--omit=peer",
+        "--frozen-lockfile",
+        "--ignore-scripts",
+      ],
       deps,
     );
     await run("npm", ["rebuild", "node-pty", "--build-from-source"], deps, {
       npm_config_build_from_source: "true",
     });
     const modules = join(deps, "node_modules");
+    // Next's optional Playwright peer can otherwise reintroduce the root dev
+    // dependency even with --production. Explicit runtime dependencies remain.
+    for (const name of [
+      "@playwright/test",
+      "playwright",
+      "playwright-core",
+      "tsx",
+      "typescript",
+      "eslint",
+      "prettier",
+    ]) {
+      try {
+        await lstat(join(modules, name));
+      } catch (error) {
+        if (error.code === "ENOENT") continue;
+        throw error;
+      }
+      throw new Error(`Developer-only dependency leaked into runtime: ${name}`);
+    }
     const canonicalModules = await realpath(modules);
     // Materialize package-manager symlinks, but never follow links out of this
     // isolated production install. No developer node_modules is copied.

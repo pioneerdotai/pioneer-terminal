@@ -39,22 +39,9 @@ export async function copyRuntimeDependencies(runtime, reportPath) {
   });
   const selected = new Set(trace.fileList);
   const warnings = [...trace.warnings].map((warning) => warning.message);
-  // ws catches these optional acceleration imports and provides JS/Node
-  // fallbacks. Any other unresolved dependency is a packaging failure.
-  const unexpected = warnings.filter(
-    (message) =>
-      !/^Failed to resolve dependency "(?:bufferutil|utf-8-validate)":/.test(
-        message,
-      ) || !message.includes("/node_modules/ws/lib/"),
-  );
-  if (unexpected.length) {
-    throw new Error(
-      `Unresolved custom server dependencies:\n${unexpected.join("\n")}`,
-    );
+  if (warnings.length) {
+    throw new Error(`Unresolved custom server dependencies:\n${warnings.join("\n")}`);
   }
-  // Native addon loading is dynamic. Declare the Linux artifact explicitly.
-  selected.add("node_modules/node-pty/build/Release/pty.node");
-  selected.add("node_modules/node-pty/package.json");
   const copied = [];
   for (const entry of [...selected].sort()) {
     if (!entry.startsWith("node_modules/")) continue;
@@ -72,7 +59,7 @@ export async function copyRuntimeDependencies(runtime, reportPath) {
   for (const file of await filesUnder(join(runtime, "node_modules"))) {
     const path = relative(runtime, file).split(sep).join("/");
     if (
-      /node_modules\/(?:@next\/swc-|@tailwindcss\/|lightningcss|lucide-react\/|tsx\/|typescript\/|@playwright\/|playwright|eslint\/|prettier\/)/.test(
+      /node_modules\/(?:@next\/swc-|@tailwindcss\/|lightningcss|lucide-react\/|node-pty\/|ws\/|tsx\/|typescript\/|@playwright\/|playwright|eslint\/|prettier\/)/.test(
         path,
       ) ||
       path.includes("linuxmusl") ||
@@ -92,6 +79,5 @@ export async function copyRuntimeDependencies(runtime, reportPath) {
     // NFT can report optional/foreign-platform imports. Keep its diagnostics
     // visible for source review; never call static tracing runtime validation.
     warnings,
-    optionalDependencyWarnings: ["bufferutil", "utf-8-validate"],
   });
 }

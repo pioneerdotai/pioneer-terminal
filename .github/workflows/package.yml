@@ -4,16 +4,47 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    tags: ["[0-9]*"]
 
 permissions:
   contents: read
 
 concurrency:
   group: pioneer-package-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate package and release versions
+        id: version
+        run: |
+          python3 - <<'PYTHON'
+          import json
+          import os
+          import re
+          from pathlib import Path
+          app = json.loads(Path("app.json").read_text())
+          package = json.loads(Path("package.json").read_text())
+          version = app["version"]
+          if not re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", version) or package["version"] != version:
+              raise SystemExit("App and package versions must match and use x.y.z")
+          if os.environ["GITHUB_REF_TYPE"] == "tag":
+              tag = os.environ["GITHUB_REF_NAME"]
+              if tag not in (version, version.removesuffix(".0")):
+                  raise SystemExit("Release tags must match the version, without a v prefix")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"version={version}\n")
+          PYTHON
+
   runtime:
+    needs: preflight
     name: Build ${{ matrix.target }}
     strategy:
       fail-fast: false
@@ -24,9 +55,9 @@ jobs:
           - runner: ubuntu-24.04-arm
             target: linux-arm64
     runs-on: ${{ matrix.runner }}
-    # Build native addons against the runtime candidate's glibc, not the
+    # Build native addons against the managed runtime's glibc, not the
     # Ubuntu runner's newer libc. Nothing is compiled in Microsandbox.
-    container: node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb
+    container: node:26-trixie@sha256:e18c3ccdf7d71619990b0e85639f506e2028a95410999cab24cc373cbd10e0ac
     timeout-minutes: 30
     env:
       NEXT_TELEMETRY_DISABLED: "1"
@@ -37,7 +68,7 @@ jobs:
       - name: Prepare developer build toolchain
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends python3 make g++ pkg-config perl ca-certificates unzip
+          apt-get install -y --no-install-recommends ca-certificates unzip
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.4.3"
@@ -45,7 +76,7 @@ jobs:
         run: bun install --frozen-lockfile --ignore-scripts
       - name: Build UI and custom server
         run: bun run build:pioneer
-      - name: Package production dependencies and native PTY
+      - name: Package production dependencies
         run: bun run package:pioneer
       - uses: actions/upload-artifact@v4
         with:
@@ -57,7 +88,7 @@ jobs:
 
   assemble:
     name: Assemble application directory
-    needs: runtime
+    needs: [preflight, runtime]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -66,21 +97,70 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "26"
       - uses: actions/download-artifact@v4
         with:
           pattern: linux-*
           path: dist/pioneer-targets
       - name: Assemble and checksum both architecture artifacts
         run: node scripts/pioneer/assemble.mjs
-      - name: Verify archive contents, native targets and size budget
+      - name: Verify archive integrity, architecture and size budget
         run: python3 scripts/pioneer/verify-package.py
       - name: Archive the combined directory with its relative layout
-        run: tar -czf dist/pioneer-terminal.tar.gz -C dist/pioneer .
+        env:
+          APP_VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd dist
+          tar -czf "pioneer-terminal-${APP_VERSION}.tar.gz" -C pioneer .
+          sha256sum "pioneer-terminal-${APP_VERSION}.tar.gz" > "pioneer-terminal-${APP_VERSION}.tar.gz.sha256"
       - uses: actions/upload-artifact@v4
         with:
           name: pioneer-terminal
-          path: dist/pioneer-terminal.tar.gz
+          path: |
+            dist/pioneer-terminal-*.tar.gz
+            dist/pioneer-terminal-*.tar.gz.sha256
           if-no-files-found: error
           compression-level: 0
           retention-days: 30
+
+  release:
+    name: Publish application release
+    if: github.ref_type == 'tag'
+    needs: [preflight, assemble]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: pioneer-terminal
+          path: release-assets
+      - name: Publish verified package
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          APP_VERSION: ${{ needs.preflight.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          sha256sum -c "pioneer-terminal-${APP_VERSION}.tar.gz.sha256"
+          if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' > release-state.txt; then
+            if [[ "$(cat release-state.txt)" != true ]]; then
+              echo "Refusing to overwrite an already published release" >&2
+              exit 1
+            fi
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft \
+              --title "Terminal $RELEASE_TAG" --notes-file ../packaging/release-notes.md
+          fi
+          gh release upload "$RELEASE_TAG" \
+            "pioneer-terminal-${APP_VERSION}.tar.gz" \
+            "pioneer-terminal-${APP_VERSION}.tar.gz.sha256" --clobber
+          gh release edit "$RELEASE_TAG" --draft=false

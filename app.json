@@ -1,11 +1,13 @@
 {
   "name": "Terminal",
-  "version": "0.1.0",
+  "version": "0.10.0",
   "slug": "terminal",
   "license": "MIT",
-  "shortDescription": "Terminal sessions in your Pioneer application environment.",
-  "longDescription": "A web terminal with tabs, split panes and reconnectable shell sessions. The shell runs inside the application's environment on the Gateway. Desktop and mobile clients display its interface through their WebView.",
-  "categories": ["development"],
+  "shortDescription": "Host terminal sessions through Pioneer Gateway.",
+  "longDescription": "A web terminal with tabs, split panes and reconnectable shell sessions on the Gateway host. Its interface runs in the managed application environment; Gateway provides authorized host PTYs. Desktop and mobile clients display the interface through their WebView.",
+  "categories": [
+    "development"
+  ],
   "icon": {
     "light": "./assets/logo.png",
     "dark": "./assets/logo.png"
@@ -24,5 +26,24 @@
   },
   "websiteURL": "https://getpioneer.dev",
   "supportURL": "https://github.com/pioneerdotai/pioneer-terminal/issues",
-  "repositoryURL": "https://github.com/pioneerdotai/pioneer-terminal"
+  "repositoryURL": "https://github.com/pioneerdotai/pioneer-terminal",
+  "runtime": {
+    "environment": "node",
+    "artifacts": {
+      "linux-x64": "./runtime-artifacts/terminal-0.10.0-linux-x64.tar.gz",
+      "linux-arm64": "./runtime-artifacts/terminal-0.10.0-linux-arm64.tar.gz"
+    },
+    "cwd": "./runtime",
+    "command": [
+      "node",
+      "start.cjs"
+    ],
+    "port": 3000,
+    "readiness": {
+      "path": "/healthz"
+    }
+  },
+  "ui": {
+    "path": "/"
+  }
 }

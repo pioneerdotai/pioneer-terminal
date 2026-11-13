@@ -5,7 +5,6 @@ import { copyMetadata, metadata, sha256 } from "./package.mjs";
 
 const input = resolve(option("--input") ?? join(root, "dist/pioneer-targets"));
 const info = await metadata();
-const image = await json(join(root, "packaging/runtime-image.json"));
 const output = join(
   root,
   "dist/pioneer",
@@ -24,7 +23,7 @@ for (const target of targets) {
     build.version !== info.app.version ||
     build.manifestSha256 !== (await sha256(join(root, "app.json"))) ||
     build.lockSha256 !== (await sha256(join(root, "bun.lock"))) ||
-    !/^22\./.test(build.node)
+    !/^26\./.test(build.node)
   ) {
     throw new Error(`Incompatible or stale artifact: ${target}`);
   }
@@ -36,6 +35,9 @@ for (const target of targets) {
     throw new Error(`Artifact comes from a different source commit: ${target}`);
   }
   const archive = `${info.app.slug}-${info.app.version}-${target}.tar.gz`;
+  if (info.app.runtime.artifacts[target] !== `./runtime-artifacts/${archive}`) {
+    throw new Error(`Manifest artifact path mismatch: ${target}`);
+  }
   if (
     build.archive !== archive ||
     build.archiveSha256 !== (await sha256(join(directory, archive)))
@@ -82,47 +84,16 @@ for (const build of builds) {
     );
   }
 }
-// Deliberately outside app.json: future runtime schema is NOT yet agreed or
-// supported by the minimal Apps installer. This is a developer handoff only.
-await writeJson(join(output, "runtime.proposal.json"), {
-  status: "developer-preview-not-an-installed-runtime-contract",
-  provider: "microsandbox",
-  imageCandidate: "node:22-bookworm-slim",
-  image: image.image,
-  imageDigest: image.image.split("@")[1],
-  platformImageDigests: image.platformDigests,
-  imageDigestStatus:
-    "pinned-slim-runtime; separate-full-CI-builder; Microsandbox qualification pending",
-  guest: { os: "linux", libc: "glibc", distribution: "debian-bookworm" },
-  archiveRoot: "runtime",
-  command: ["node", "start.cjs"],
-  port: 3000,
-  readiness: { method: "GET", path: "/healthz", header: "x-pioneer-app-token" },
-  gatewayEnvironment: [
-    "PIONEER_APP_TOKEN",
-    "PIONEER_APP_ORIGIN",
-    "PIONEER_APP_DATA",
-  ],
-  requiredGuestCommands: ["node", "/bin/bash", "perl"],
-  gatewayProxy:
-    "Inject x-pioneer-app-token server-side for every HTTP request and WebSocket upgrade; preserve the public Origin. Never expose the token to client JS.",
-  ui: {
-    path: "/",
-    routing: "dedicated-origin-required",
-    websocketPath: "/api/terminal",
-  },
+await writeJson(join(output, "build-info.json"), {
+  slug: info.app.slug,
+  version: info.app.version,
+  environment: info.app.runtime.environment,
+  sourceCommit: process.env.GITHUB_SHA ?? null,
   artifacts,
 });
-await writeFile(
-  join(output, "INSTALLATION-NOTES.txt"),
-  "Developer preview for the FUTURE Gateway runtime. Not installable by the current minimal Apps parser.\n" +
-    "Select one Linux architecture archive, extract in the app package, provide Node.js 22 via Microsandbox, attach persistent data and inject the documented Gateway environment/header.\n" +
-    "Use the pinned slim runtime image and validate its Node ABI before execution. Never install dependencies or build this package on the Gateway.\n" +
-    "The terminal shell runs inside the sandbox, not on the Gateway host or client. Live PTYs do not survive backend restart.\n",
-);
 const { fileIndex } = await import("./common.mjs");
 const sums = (await fileIndex(output))
   .map((file) => `${file.sha256}  ${file.path}`)
   .join("\n");
 await writeFile(join(output, "SHA256SUMS"), `${sums}\n`);
-console.log(`Combined developer package: ${output}`);
+console.log(`Assembled application package: ${output}`);

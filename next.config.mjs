@@ -6,7 +6,6 @@ const nextConfig = {
     "**": ["**/node_modules/@img/*linuxmusl*/**"],
   },
   transpilePackages: ["@wterm/core", "@wterm/dom", "@wterm/react"],
-  serverExternalPackages: ["node-pty"],
 };
 
 export default nextConfig;

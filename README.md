@@ -1,14 +1,15 @@
-# Local Shell Example
+# Pioneer Terminal
 
-For the Pioneer application build, architecture artifacts and future installation
+For the Pioneer application build, production artifacts and installation
 contract, see [Preparing Terminal for Pioneer](docs/pioneer-packaging.md).
-The standalone development instructions below remain available.
+Production runs in the managed Node 26 runtime; Gateway provides host PTY sessions.
+The local development server below provides PTYs only for development.
 
 Full local terminal in the browser, connected to your machine's shell via WebSocket and [node-pty](https://github.com/microsoft/node-pty). Use the top tab bar to create, switch between, and close independent shell sessions, and split the workspace to view up to four shells at once.
 
 ## Setup (standalone project)
 
-Requires Node.js 22+ and Bun. Bun installs packages and runs project commands;
+Requires Node.js 26 and Bun 1.4.3. Bun installs packages and runs project commands;
 Node.js executes the server. This project uses the published `@wterm/*` packages
 and needs no monorepo checkout, Zig build, or portless installation.
 
@@ -20,10 +21,10 @@ bun run dev
 Open http://127.0.0.1:3000. Ghostty is the only terminal engine, served at `/`.
 Use `PORT=3001 bun run dev` to choose another port.
 Next.js reloads frontend changes automatically; restart `bun run dev` after
-changing `server.ts` or its server-side dependencies.
+changing `server.ts`, `dev-server.ts`, or their dependencies.
 
 The Ghostty WASM file is copied from its installed package to `public/` before development,
-build, and production startup. The preparation script also fixes executable
+and build. The preparation script also fixes executable
 permissions on the macOS node-pty helper when present.
 
 ```bash
@@ -31,13 +32,13 @@ bun run type-check
 bun run lint
 bun run test
 bun run build
-bun run start
 ```
 
-`start` runs the same custom Node.js server in production mode so terminal
-WebSockets work alongside Next.js. Running `next start` alone does not start
-the terminal backend. The server listens on loopback by default and opens
-shells on your local machine.
+Production packaging uses `bun run build:pioneer`, `bun run package:pioneer`,
+and `bun run assemble:pioneer` on the documented Linux builders. The resulting
+package runs `node start.cjs` without Bun, tsx, node-pty, or an installation step.
+Gateway routes terminal WebSockets to its host PTY service. See the packaging
+and Gateway requirements documents before attempting an installation.
 
 `bun run lint` checks Next.js/React rules, canonical Tailwind CSS classes, and
 conflicting utilities that set the same CSS properties. This includes CSS variable
@@ -58,11 +59,12 @@ Browser tests: `bunx playwright install chromium`, then `bun run build` and
 `bun run test:e2e --project=chromium`. Results are saved under `test-results/`.
 
 Start editing `app/` for the interface, `lib/` for session behavior, and
-`server.ts` for shell/WebSocket handling. The project is based on the local shell example. Upstream: https://github.com/vercel-labs/wterm/tree/main/examples/local.
+`server.ts` for production HTTP serving and `dev-server.ts` for local PTYs. The project is based on the local shell example. Upstream: https://github.com/vercel-labs/wterm/tree/main/examples/local.
 
 ## How It Works
 
-- `server.ts` starts an HTTP + WebSocket server alongside Next.js
+- Production `server.ts` serves Next.js HTTP; Gateway handles terminal WebSockets.
+- Local `dev-server.ts` supplies the PTY/session service for development; the following session behavior describes that protocol.
 - A new terminal attaches to a server session and spawns your default shell after its initial dimensions arrive
 - A brief connection interruption resumes that same shell and existing browser terminal; missing output is replayed without repeating parsed bytes
 - Reloading restores split layouts, divider positions, zoom, and the focused terminal, and resumes saved shells while complete recovery records and server sessions remain available
@@ -89,10 +91,10 @@ Start editing `app/` for the interface, `lib/` for session behavior, and
 
 | File                           | Description                                                                        |
 | ------------------------------ | ---------------------------------------------------------------------------------- |
-| `server.ts`                    | Custom server with WebSocket ↔ PTY bridge                                          |
+| `server.ts`                    | Production HTTP server; no shell processes                                          |
 | `lib/pty-output.ts`            | Bounded output window and PTY pause/resume                                         |
 | `lib/pty-output-queue.mts`     | Bounded byte queue and small-read batching shared with the PTY input harness       |
-| `lib/terminal-sessions.ts`     | Session ownership, attachment tokens, replay, and expiry                           |
+| `lib/terminal-sessions.ts`     | Development PTY service: session ownership, attachment tokens, replay, and expiry                           |
 | `lib/session-recovery.ts`      | Bounded tab-scoped output, resize, and theme replay records                        |
 | `lib/terminal-connection.ts`   | Browser parsing tasks, acknowledgments, and bounded input                          |
 | `lib/terminal-protocol.ts`     | Shared message types and buffer limits                                             |

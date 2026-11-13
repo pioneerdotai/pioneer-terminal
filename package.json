@@ -1,24 +1,21 @@
 {
   "name": "pioneer-terminal",
-  "version": "0.1.0",
+  "version": "0.10.0",
   "private": true,
   "scripts": {
     "predev": "node scripts/prepare-assets.mjs",
-    "dev": "node --import tsx server.ts",
+    "dev": "node --import tsx dev-server.ts",
     "prebuild": "node scripts/prepare-assets.mjs",
     "build": "next build",
     "build:server": "bun build server.ts --target=node --format=cjs --packages=external --define 'process.env.NODE_ENV=\"production\"' --outfile=build/server.cjs",
     "build:pioneer": "node scripts/pioneer/build.mjs",
     "package:pioneer": "node scripts/pioneer/package.mjs",
     "assemble:pioneer": "node scripts/pioneer/assemble.mjs",
-    "preview:microsandbox": "node scripts/pioneer/preview.mjs",
-    "start": "NODE_ENV=production node --import tsx server.ts",
     "lint": "eslint --max-warnings=0",
     "type-check": "tsc --noEmit",
     "test:e2e": "node run-e2e.mjs",
     "test": "node --import tsx --test tests/*.test.ts",
     "prepare:assets": "node scripts/prepare-assets.mjs",
-    "prestart": "node scripts/prepare-assets.mjs",
     "lint:fix": "eslint --fix --max-warnings=0",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
@@ -31,12 +28,10 @@
     "@wterm/react": "0.5.10",
     "lucide-react": "^1.72.0",
     "next": "16.4.6",
-    "node-pty": "^1.0.0",
     "postcss": "^8.5.9",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "tailwindcss": "^4.3.5",
-    "ws": "^8.22.2"
+    "tailwindcss": "^4.3.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",
@@ -51,10 +46,12 @@
     "prettier": "3.10.1",
     "prettier-plugin-tailwindcss": "0.8.1",
     "tsx": "^4.19.4",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "node-pty": "^1.0.0",
+    "ws": "^8.22.2"
   },
   "packageManager": "bun@1.4.3",
   "engines": {
-    "node": ">=22"
+    "node": "26.x"
   }
 }

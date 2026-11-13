@@ -9,7 +9,6 @@ await mkdir(buildDirectory, { recursive: true });
 // An interrupted rebuild must never leave a previous successful receipt behind.
 await rm(join(buildDirectory, "pioneer-build.json"), { force: true });
 await rm(join(root, ".next"), { recursive: true, force: true });
-await run("node", ["scripts/prepare-assets.mjs"]);
 await run("bun", ["run", "build"]);
 await run("bun", ["run", "build:server"]);
 const pkg = await json(join(root, "package.json"));

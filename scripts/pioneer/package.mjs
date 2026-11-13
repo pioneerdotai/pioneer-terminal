@@ -75,10 +75,10 @@ export async function copyMetadata(destination, info) {
 async function main() {
   if (
     process.platform !== "linux" ||
-    Number(process.versions.node.split(".")[0]) !== 22
+    Number(process.versions.node.split(".")[0]) !== 26
   ) {
     throw new Error(
-      "Package on Linux with Node.js 22 (the CI Debian builder). No host-native artifact may be labelled Linux.",
+      "Package on Linux with Node.js 26 (the CI Debian builder). No host-native artifact may be labelled Linux.",
     );
   }
   const target = nativeTarget();
@@ -105,10 +105,6 @@ async function main() {
   try {
     const runtime = join(temporary, "payload/runtime");
     await mkdir(runtime, { recursive: true });
-    // Author/CI only: compile the addon before tracing its runtime file closure.
-    await run("npm", ["rebuild", "node-pty", "--build-from-source"], root, {
-      npm_config_build_from_source: "true",
-    });
     await copyRuntimeDependencies(
       runtime,
       join(temporary, "dependency-trace.json"),
@@ -141,31 +137,15 @@ async function main() {
       platform: process.platform,
       arch: process.arch,
       nodeModulesABI: process.versions.modules,
-      nodeMajor: 22,
+      nodeMajor: 26,
     });
     await writeJson(join(runtime, "package.json"), {
       name: info.pkg.name,
       version: info.pkg.version,
       private: true,
       scripts: { start: "node start.cjs" },
-      dependencies: Object.fromEntries(
-        ["next", "ws", "node-pty"].map((name) => [
-          name,
-          info.pkg.dependencies[name],
-        ]),
-      ),
+      dependencies: { next: info.pkg.dependencies.next },
     });
-    const elf = await readFile(
-      join(runtime, "node_modules/node-pty/build/Release/pty.node"),
-    );
-    const machine = process.arch === "arm64" ? 183 : 62;
-    if (
-      !elf.subarray(0, 4).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46])) ||
-      elf[5] !== 1 ||
-      elf.readUInt16LE(18) !== machine
-    ) {
-      throw new Error(`node-pty native binary is not ${target} ELF`);
-    }
     const release = join(temporary, "release");
     await mkdir(release);
     await cp(
@@ -190,7 +170,6 @@ async function main() {
       dependenciesBytes: entries
         .filter((entry) => entry.path.startsWith("runtime/node_modules/"))
         .reduce((total, entry) => total + entry.size, 0),
-      nativePtyBytes: elf.length,
       nodeRuntimeIncluded: false,
     });
     // GNU tar in the Debian builder preserves Linux executable modes.
@@ -213,7 +192,7 @@ async function main() {
       node: process.versions.node,
       nodeModulesABI: process.versions.modules,
       libc: "glibc",
-      buildBase: "debian-bookworm",
+      buildBase: "debian-trixie",
       manifestSha256: await sha256(join(root, "app.json")),
       lockSha256: await sha256(join(root, "bun.lock")),
       assetSha256: Object.fromEntries(

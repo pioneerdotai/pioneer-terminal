@@ -20,11 +20,6 @@
 /dist/
 /.pioneer-stage-*/
 
-# Undeclared scratch examples inherited from the initial manifest experiment.
-# They remain local and are not part of Terminal or its release artifacts.
-/mcp.json
-/skills/terminal/
-
 # misc
 .DS_Store
 *.pem

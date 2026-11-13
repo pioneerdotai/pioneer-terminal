@@ -37,16 +37,15 @@ const data = process.env.PIONEER_APP_DATA;
 if (!data || !isAbsolute(data)) {
   throw new Error("Gateway must provide an absolute PIONEER_APP_DATA path");
 }
-mkdirSync(join(data, "home"), { recursive: true });
-process.env.HOME = join(data, "home");
-process.env.SHELL ??= "/bin/bash";
+mkdirSync(join(data, "cache"), { recursive: true });
+process.env.HOME = data;
 // Guest interface only. Gateway publishes/routes this port; no host bind here.
 process.env.HOST ??= "0.0.0.0";
 process.env.PORT ??= "3000";
 process.chdir(__dirname);
 // Use the exact production config serialized by Next's standalone build.
-// The generated standalone server is NOT used: server.cjs owns HTTP/WS/PTY.
+// The generated standalone server is NOT used: server.cjs serves HTTP; Gateway owns terminal WebSockets.
 process.env.__NEXT_PRIVATE_STANDALONE_CONFIG = JSON.stringify(
   require("./.next/required-server-files.json").config,
 );
-require("./server.cjs");
+require("./server.cjs").startServer();

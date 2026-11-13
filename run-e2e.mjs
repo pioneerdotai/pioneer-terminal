@@ -31,7 +31,7 @@ function launch(args, env) {
   return result;
 }
 
-const server = launch(["--import", "tsx", "server.ts"], {
+const server = launch(["--import", "tsx", "dev-server.ts"], {
   ...process.env,
   NODE_ENV: "production",
   HOST: "127.0.0.1",

@@ -35,7 +35,7 @@ def verify(directory):
         expected, name = line.split("  ", 1)
         with local_path(root, name).open("rb") as stream:
             require(digest(stream) == expected, f"Package checksum mismatch: {name}")
-    proposal = json.loads((root / "runtime.proposal.json").read_text())
+    proposal = json.loads((root / "build-info.json").read_text())
     results = []
     for target, artifact in proposal["artifacts"].items():
         machine = {"linux-x64": 62, "linux-arm64": 183}[target]
@@ -48,7 +48,6 @@ def verify(directory):
         found = set()
         total = 0
         native_count = 0
-        native_pty = False
         runtime_target = None
         with tarfile.open(archive, "r|gz") as members:
             for member in members:
@@ -76,18 +75,15 @@ def verify(directory):
                             struct.unpack_from("<H", header, 18)[0] == machine,
                             f"Wrong ELF architecture: {member.name}")
                     native_count += 1
-                    if member.name == "runtime/node_modules/node-pty/build/Release/pty.node":
-                        native_pty = True
                 if capture is not None:
                     runtime_target = json.loads(capture)
                 found.add(member.name)
                 total += member.size
         require(found == set(entries), f"Missing files: {target}")
-        require(native_count > 0 and native_pty,
-                f"Missing native PTY: {target}")
         require(runtime_target and runtime_target["platform"] == "linux" and
                 runtime_target["arch"] == target.split("-")[1] and
-                runtime_target["nodeModulesABI"] == artifact["nodeModulesABI"],
+                runtime_target["nodeModulesABI"] == artifact["nodeModulesABI"] and
+                runtime_target["nodeMajor"] == 26,
                 f"Wrong runtime target metadata: {target}")
         require(total == artifact["unpackedBytes"] and len(found) == artifact["runtimeFileCount"],
                 f"Wrong package statistics: {target}")

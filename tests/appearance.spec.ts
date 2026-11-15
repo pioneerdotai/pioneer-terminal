@@ -208,7 +208,7 @@ test("corrupt settings and backend persistence failure leave appearance usable",
   appState(page).failWrites = true;
   const dialog = await settings(page);
   await dialog.getByRole("combobox", { name: "Theme" }).selectOption("light");
-  await expect(page.getByRole("alert")).toContainText("could not be saved");
+  await expect(page.getByRole("alert").filter({ hasText: "could not be saved" })).toContainText("could not be saved");
   await expect(page.locator(".local-terminal")).toHaveCSS(
     "background-color",
     "rgb(250, 250, 250)",

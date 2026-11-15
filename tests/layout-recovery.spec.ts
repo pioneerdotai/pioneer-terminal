@@ -205,7 +205,7 @@ test("backend state failure is visible while existing terminals remain usable", 
   await flushState(page);
   appState(page).failWrites = true;
   await page.getByRole("button", { name: "/shell-1", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("could not be saved");
+  await expect(page.getByRole("alert").filter({ hasText: "could not be saved" })).toContainText("could not be saved");
   await page.keyboard.type("still-live");
   await expect.poll(() => [...h.sessions.values()][0].text).toBe("still-live");
 });

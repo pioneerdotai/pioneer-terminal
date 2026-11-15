@@ -147,7 +147,7 @@ test("backend write denial reports failure while live output and input keep work
   appState(page).failWrites = true;
   h.sockets[0].send(Buffer.from("live output"));
   await expect(grid(page)).toContainText("live output");
-  await expect(page.getByRole("alert")).toContainText("could not be saved");
+  await expect(page.getByRole("alert").filter({ hasText: "could not be saved" })).toContainText("could not be saved");
   await terminal(page).focus();
   await page.keyboard.type("still-live");
   expect(h.inputs.map((value) => value.data).join("")).toBe("still-live");

@@ -295,7 +295,7 @@ test("backend persistence failure leaves changed shortcuts usable", async ({ pag
   await settings(page);
   appState(page).failWrites = true;
   await record(page, "Find in terminal", "Control+Shift+h");
-  await expect(page.getByRole("alert")).toContainText("could not be saved");
+  await expect(page.getByRole("alert").filter({ hasText: "could not be saved" })).toContainText("could not be saved");
   await closeSettings(page);
   await input(page, 1).focus();
   await page.keyboard.press("Control+Shift+h");

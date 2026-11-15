@@ -2,6 +2,7 @@
 
 import { backendStorage, executionId } from "../lib/browser-state";
 import { workspaceColors } from "../lib/host-theme";
+import { getAppClient } from "../lib/app-client";
 
 import { createPortal, flushSync } from "react-dom";
 import {
@@ -221,9 +222,9 @@ function SessionTerminal({
   useEffect(() => {
     let cancelled = false;
     onStatus(session.id, "loading");
-    GhosttyCore.load({
-      wasmPath: new URL("ghostty-vt.wasm", document.baseURI).href,
-    })
+    getAppClient().then(app => GhosttyCore.load({
+      wasmPath: app.url("ghostty-vt.wasm"),
+    }))
       .then((loadedCore) => {
         if (cancelled) {
           disposeCore(loadedCore);
@@ -267,6 +268,8 @@ function SessionTerminal({
 
   const handleReady = useCallback(
     async (wt: WTerm) => {
+      if (disposedRef.current) return;
+      const app = await getAppClient();
       if (disposedRef.current) return;
       setReady(false);
       // A new parser cannot resume from the previous parser's byte position.
@@ -351,8 +354,7 @@ function SessionTerminal({
         connectFrameRef.current = null;
         if (disposedRef.current || wsRef.current) return;
 
-        const wsUrl = new URL("terminal", document.baseURI);
-        wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
+        const wsUrl = app.webSocketUrl("terminal");
         onStatus(session.id, "connecting");
         let restoredConnection = !!saved;
         const connection = new TerminalConnection(

@@ -104,12 +104,32 @@ this user-identity header.
 This isolates App state and sessions; shells still run as the Gateway host OS
 account, not as separate OS users or filesystem sandboxes.
 
-`pioneer.theme` messages are accepted from the embedding parent, with validated
-palette colors. A top-level development page also accepts messages from its own
-window with the same origin; this path is disabled in production. System
+The SDK accepts `pioneer.theme` messages from the embedding parent, with validated
+palette colors. A top-level page accepts messages from its own window with the
+same origin, supporting direct dev views without a framework-specific mode. System
 appearance follows the supplied palette; explicit light/dark preferences remain
 user-controlled. The palette is held in the theme store and applied through React
 after the workspace mounts; the message handler does not mutate the document.
+
+## SDK migration
+
+The source uses the public npm package `@pioneercompany/app-sdk`. SDK methods
+load bootstrap, validate HTTP/upgrade credentials and identity, maintain the
+Gateway transport and own host PTYs. Terminal's GatewayHost is only a session
+adapter: it coalesces sizes, bounds paused output and deduplicates replay against
+bytes already accepted by Terminal's output owner. It acknowledges that accepted
+prefix through SDK frame receipts. Browser ACKs still control the separate
+Terminal-to-browser window. Uncertain input is rejected without automatic replay.
+SDK cleanup is awaited during shutdown; unconfirmed cleanup reports failure.
+
+The client is connected at browser module initialization, before page load.
+SSR does not connect. Theme is applied through React, and SDK methods construct
+state, WASM and WebSocket URLs using the backend-rendered base href. Direct local
+development retains its own PTY provider and does not invent Host API authority.
+
+The SDK ESM/CJS package is installed from npm and pinned by bun.lock.
+Terminal builds, type checks, test suites and the real dev/installed workflow
+have not been run for this change; they remain for review and validation.
 
 ## Interactive Host API changes (source only, November 14)
 

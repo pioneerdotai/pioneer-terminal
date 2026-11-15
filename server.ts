@@ -1,12 +1,10 @@
-import { timingSafeEqual } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { isAbsolute } from "node:path";
+import { createAppServerContext, nodeRequestHeaders, type AppServerContext } from "@pioneercompany/app-sdk/server";
 import { createServer, type IncomingMessage } from "node:http";
 import { parse } from "node:url";
 import type { Duplex } from "node:stream";
 import { WebSocketServer } from "ws";
 import next from "next";
-import { GatewayHost, type AppBootstrap } from "./lib/gateway-host";
+import { GatewayHost } from "./lib/gateway-host";
 import { TerminalSessions } from "./lib/terminal-sessions";
 import { CONTROL_RESERVE, INPUT_LIMIT } from "./lib/terminal-protocol";
 import { AppState } from "./lib/app-state";
@@ -16,55 +14,35 @@ const hostname = process.env.HOST || (dev ? "127.0.0.1" : "0.0.0.0");
 const port = Number(process.env.PORT || "3000");
 type TerminalService = {
   upgrade(req: IncomingMessage, socket: Duplex, head: Buffer, owner: string): void;
-  close(): void;
+  close(): void | Promise<void>;
 };
-
-async function bootstrap(): Promise<AppBootstrap> {
-  const file = process.env.PIONEER_BOOTSTRAP;
-  if (!file || !isAbsolute(file)) throw new Error("Missing Gateway bootstrap");
-  const raw = await readFile(file, "utf8");
-  if (raw.length > 16384) throw new Error("Invalid Gateway bootstrap");
-  const value: AppBootstrap = JSON.parse(raw);
-  if (!/^[A-Za-z0-9_-]{21}$/.test(value.execution_id) || !/^[a-f0-9]{64}$/.test(value.ui_proxy?.credential)) throw new Error("Invalid Gateway bootstrap");
-  if (value.host_api !== null) {
-    const host = value.host_api;
-    if (!host || !/^[a-f0-9]{64}$/.test(host.credential) || !Array.isArray(host.capabilities) || !host.capabilities.every((v) => typeof v === "string")) throw new Error("Invalid Host API bootstrap");
-    const url = new URL(host.endpoint);
-    if (!["ws:", "wss:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error("Invalid Host API endpoint");
-  }
-  return value;
-}
 
 // The injected local PTY service exists only in dev-server.ts, never in production.
 export function startServer(developmentTerminal?: TerminalService) {
+  let context: AppServerContext | null = null;
   void (async () => {
     const local = developmentTerminal !== undefined;
-    const config = local ? null : await bootstrap();
-    const directory = process.env.APP_DATA || (local ? ".terminal-data" : "");
-    if (!local && !isAbsolute(directory)) throw new Error("Missing Gateway App data path");
-    const state = new AppState(directory, config?.execution_id ?? "local-development");
+    context = local ? null : await createAppServerContext();
+    const state = new AppState(context?.appData ?? (process.env.APP_DATA || ".terminal-data"), context?.execution.id ?? "local-development");
     await state.load();
-    const host = config ? new GatewayHost(config) : null;
+    const host = context ? new GatewayHost(context) : null;
     const sessions = host ? new TerminalSessions(host.spawn) : null;
     const wss = new WebSocketServer({ noServer: true, maxPayload: INPUT_LIMIT * 6 + CONTROL_RESERVE });
     const terminal: TerminalService | undefined = developmentTerminal ?? (sessions ? {
       upgrade(req, socket, head, owner) { wss.handleUpgrade(req, socket, head, (ws) => sessions.accept(ws, owner)); },
-      close() { sessions.close(); for (const client of wss.clients) client.terminate(); wss.close(); host?.close(); },
+      close() { sessions.close(); for (const client of wss.clients) client.terminate(); wss.close(); return host?.close(); },
     } : undefined);
     const authorized = (req: IncomingMessage) => {
-      if (!config) return true;
-      const value = req.headers["pioneer-app-execution-credential"];
-      if (typeof value !== "string") return false;
-      const expected = Buffer.from(config.ui_proxy.credential);
-      const actual = Buffer.from(value);
-      return actual.length === expected.length && timingSafeEqual(actual, expected);
+      if (!context) return true;
+      try { context.authenticateServiceRequest(nodeRequestHeaders(req)); return true; }
+      catch { return false; }
     };
     // Only trust this header after the execution credential check. Gateway
     // supplies it from the admitted view's principal, never from browser input.
     const requestOwner = (req: IncomingMessage): string | null => {
       if (local) return "local-development";
-      const owner = req.headers["pioneer-app-user-id"];
-      return typeof owner === "string" && /^[A-Za-z0-9]{21}$/.test(owner) ? owner : null;
+      try { return context!.authenticateRequest(nodeRequestHeaders(req)).user.id; }
+      catch { return null; }
     };
     const app = next({ dev, hostname, port, turbopack: dev });
     await app.prepare();
@@ -101,14 +79,24 @@ export function startServer(developmentTerminal?: TerminalService) {
       stopping = true;
       const deadline = setTimeout(() => process.exit(1), 10_000);
       deadline.unref();
-      terminal?.close();
+      // Observe cleanup immediately, then wait for confirmed SDK teardown before
+      // reporting successful shutdown. The existing deadline remains the bound.
+      const cleanup = Promise.resolve().then(() => terminal?.close()).then(() => true, () => {
+        console.error("Terminal Host API cleanup could not be confirmed.");
+        return false;
+      });
       server.close(() => {
-        void app.close().then(() => { clearTimeout(deadline); process.exit(0); }).catch(() => process.exit(1));
+        void Promise.all([cleanup, app.close()]).then(([clean]) => {
+          clearTimeout(deadline); process.exit(clean ? 0 : 1);
+        }).catch(() => process.exit(1));
       });
       server.closeIdleConnections();
     };
     process.once("SIGTERM", shutdown);
     process.once("SIGINT", shutdown);
     server.on("error", () => { console.error("Terminal server failed"); process.exit(1); });
-  })().catch(() => { console.error("Terminal backend preparation failed"); process.exit(1); });
+  })().catch(async () => {
+    await context?.close().catch(() => { console.error("Terminal Host API cleanup could not be confirmed."); });
+    console.error("Terminal backend preparation failed"); process.exit(1);
+  });
 }

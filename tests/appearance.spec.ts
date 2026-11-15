@@ -35,6 +35,36 @@ async function settings(page: Page) {
   return appearanceDialog(page);
 }
 
+test("Pioneer SDK theme updates preserve the mounted terminal and respect explicit appearance", async ({ page }) => {
+  const hydrationErrors: string[] = [];
+  page.on("console", message => {
+    if (/hydration|hydrated/i.test(message.text())) hydrationErrors.push(message.text());
+  });
+  const h = await open(page, "/");
+  h.sockets[0].send(Buffer.from("retained across host theme\r\n"));
+  await expect(page.locator(".term-grid")).toContainText("retained across host theme");
+  const htmlStyle = await page.locator("html").getAttribute("style");
+  await page.locator(".term-grid").evaluate(element => Object.assign(window, { sdkThemeGrid: element }));
+  const palette = {
+    appearance: "light", background: "#eeeeee", foreground: "#111111",
+    muted: "#777777", border: "#aaaaaa", accent: "#3366ff", "accent-foreground": "#ffffff",
+  };
+  await page.evaluate(palette => window.postMessage({ type: "pioneer.theme", palette }, location.origin), palette);
+  await expect(page.locator(".workspace")).toHaveCSS("background-color", "rgb(238, 238, 238)");
+  await expect(page.locator(".local-terminal")).toHaveCSS("background-color", "rgb(250, 250, 250)");
+  const dialog = await settings(page);
+  await dialog.getByRole("combobox", { name: "Theme" }).selectOption("dark");
+  await page.keyboard.press("Escape");
+  await page.evaluate(palette => window.postMessage({ type: "pioneer.theme", palette }, location.origin), palette);
+  await expect(page.locator(".local-terminal")).toHaveCSS("background-color", "rgb(0, 0, 0)");
+  await expect(page.locator(".term-grid")).toContainText("retained across host theme");
+  expect(await page.locator(".term-grid").evaluate(element =>
+    (window as unknown as { sdkThemeGrid: Element }).sdkThemeGrid === element)).toBe(true);
+  expect(await page.locator("html").getAttribute("style")).toBe(htmlStyle);
+  expect(h.sockets).toHaveLength(1);
+  expect(hydrationErrors).toEqual([]);
+});
+
 test(`appearance updates existing and new panes, resizes the PTY, and survives reload`, async ({
   page,
 }) => {

@@ -1,5 +1,7 @@
 "use client";
 
+import { getAppClient } from "./app-client";
+
 // Opaque WebViews cannot use browser storage. Keep a mirror of one backend snapshot.
 const values = new Map<string, string>();
 let pending = new Map<string, string | null>();
@@ -12,7 +14,6 @@ let flushing = false;
 let failed = false;
 const listeners = new Set<() => void>();
 const publish = () => { for (const listener of listeners) listener(); };
-const endpoint = () => new URL("state", document.baseURI);
 const schedule = () => { timer ??= setTimeout(() => { timer = undefined; void flushState(); }, 250); };
 function changed() {
   if (!initialized || failed) throw new Error("Terminal state is unavailable");
@@ -36,7 +37,8 @@ export const subscribeState = (listener: () => void) => { listeners.add(listener
 export const stateFailed = () => failed;
 export async function loadState() {
   if (initialized) return;
-  const response = await fetch(endpoint(), { credentials: "omit", cache: "no-store" });
+  const app = await getAppClient();
+  const response = await fetch(app.url("state"), { credentials: "omit", cache: "no-store" });
   if (!response.ok) throw new Error("Cannot load Terminal state");
   const state = await response.json();
   if (typeof state.execution !== "string" || !state.values || typeof state.values !== "object" || Array.isArray(state.values) || Object.values(state.values).some((value) => typeof value !== "string")) throw new Error("Invalid Terminal state");
@@ -52,7 +54,8 @@ export async function flushState() {
   const changes = pending;
   pending = new Map();
   try {
-    const response = await fetch(endpoint(), {
+    const app = await getAppClient();
+    const response = await fetch(app.url("state"), {
       method: "POST", credentials: "omit", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ execution, changes: Object.fromEntries(changes) }),
     });

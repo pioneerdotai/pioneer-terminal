@@ -7,6 +7,14 @@ Host API for host PTYs. The published 0.10 package has no Host API client yet;
 see [integration status](docs/gateway-runtime-requirements.md).
 The local development server below provides PTYs only for development.
 
+Pioneer integration uses `@pioneercompany/app-sdk/client` for theme and view URLs and
+`@pioneercompany/app-sdk/server` for backend authority and Gateway PTYs. The SDK is
+installed from the public npm registry, with its version pinned by bun.lock.
+Use `bun install --frozen-lockfile` in CI and update the dependency and lockfile
+when upgrading the SDK. The installed package contains built ESM/CJS outputs.
+Terminal retains its browser-session protocol, bounded output/replay queues,
+per-user state and the local development PTY provider.
+
 Full local terminal in the browser, connected to your machine's shell via WebSocket and [node-pty](https://github.com/microsoft/node-pty). Use the top tab bar to create, switch between, and close independent shell sessions, and split the workspace to view up to four shells at once.
 
 ## Setup (standalone project)

@@ -142,7 +142,11 @@ async function main() {
       name: info.pkg.name,
       version: info.pkg.version,
       private: true,
-      dependencies: { next: info.pkg.dependencies.next, ws: info.pkg.dependencies.ws },
+      dependencies: {
+        next: info.pkg.dependencies.next,
+        ws: info.pkg.dependencies.ws,
+        "@pioneercompany/app-sdk": info.pkg.dependencies["@pioneercompany/app-sdk"],
+      },
     });
     const release = join(temporary, "release");
     await mkdir(release);

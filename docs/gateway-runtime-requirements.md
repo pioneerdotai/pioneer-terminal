@@ -104,9 +104,12 @@ this user-identity header.
 This isolates App state and sessions; shells still run as the Gateway host OS
 account, not as separate OS users or filesystem sandboxes.
 
-`pioneer.theme` messages are accepted only from the embedding parent, with
-validated palette colors. System appearance follows the parent palette; explicit
-light/dark preferences remain user-controlled.
+`pioneer.theme` messages are accepted from the embedding parent, with validated
+palette colors. A top-level development page also accepts messages from its own
+window with the same origin; this path is disabled in production. System
+appearance follows the supplied palette; explicit light/dark preferences remain
+user-controlled. The palette is held in the theme store and applied through React
+after the workspace mounts; the message handler does not mutate the document.
 
 ## Interactive Host API changes (source only, November 14)
 

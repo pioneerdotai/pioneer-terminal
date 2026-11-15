@@ -8,7 +8,11 @@ export const hostPalette = () => palette;
 export const subscribeTheme = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 function listenHostTheme() {
   const receive = (event: MessageEvent) => {
-    if (window.parent === window || event.source !== window.parent || event.data?.type !== "pioneer.theme") return;
+    if (event.data?.type !== "pioneer.theme") return;
+    if (window.parent === window) {
+      // Direct dev views receive the shell's message in their own window.
+      if (process.env.NODE_ENV !== "development" || event.source !== window || event.origin !== window.location.origin) return;
+    } else if (event.source !== window.parent) return;
     const value = event.data.palette;
     if (!value || !["dark", "light"].includes(value.appearance)) return;
     for (const key of ["background", "foreground", "muted", "border", "accent", "accent-foreground"]) {

@@ -203,7 +203,7 @@ export class RecoveryLog {
   }
 }
 
-/** Output and credentials stay in this tab's sessionStorage, scoped to its engine route. */
+/** Recovery records are scoped to one backend execution; no Host API credentials are stored. */
 export class SessionRecovery {
   readonly initial: WorkspaceState;
   private logs = new Map<string, RecoveryLog>();

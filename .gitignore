@@ -46,3 +46,6 @@ next-env.d.ts
 # browser test output
 /test-results/
 /playwright-report/
+
+# Local development state (production uses APP_DATA).
+.terminal-data/

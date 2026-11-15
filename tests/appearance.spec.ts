@@ -1,4 +1,5 @@
-import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
+import { appState, flushState } from "./app-test";
+import { expect, test, type Page, type WebSocketRoute } from "./app-test";
 import { acceptTerminal } from "./terminal-route";
 import { APPEARANCE_KEY } from "../lib/appearance";
 
@@ -6,7 +7,7 @@ async function open(page: Page, path: string) {
   const sockets: WebSocketRoute[] = [];
   const input: string[] = [];
   const sizes: { cols: number; rows: number }[][] = [];
-  await page.routeWebSocket("**/api/terminal", (socket) => {
+  await page.routeWebSocket("**/terminal", (socket) => {
     acceptTerminal(socket);
     const index = sockets.length;
     sockets.push(socket);
@@ -81,10 +82,8 @@ test(`appearance updates existing and new panes, resizes the PTY, and survives r
     await expect(terminal).toHaveCSS("background-color", "rgb(250, 250, 250)");
     await expect(terminal).toHaveCSS("font-size", "20px");
   }
-  const stored = await page.evaluate(
-    (key) => JSON.parse(localStorage.getItem(key)!),
-    APPEARANCE_KEY,
-  );
+  await flushState(page);
+  const stored = JSON.parse(appState(page).values.get(APPEARANCE_KEY)!);
   expect(stored).toEqual({ theme: "light", fontSize: 20 });
   // Wait for attachment, not just focus, before testing session recovery.
   await expect.poll(() => h.sizes[1]?.length ?? 0).toBeGreaterThan(0);
@@ -197,29 +196,19 @@ test("theme updates repaint retained indexed colors and preserve fragmented inpu
   expect(h.sockets).toHaveLength(1);
 });
 
-test("corrupt and unavailable browser storage leave appearance usable", async ({
+test("corrupt settings and backend persistence failure leave appearance usable", async ({
   page,
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.addInitScript(
-    (key) => localStorage.setItem(key, '{"theme":"invalid","fontSize":99999}'),
-    APPEARANCE_KEY,
-  );
+  appState(page).values.set(APPEARANCE_KEY, '{"theme":"invalid","fontSize":99999}');
   await page.emulateMedia({ colorScheme: "dark" });
   await open(page, "/");
   await expect(page.locator(".local-terminal")).toHaveCSS("font-size", "14px");
-  await page.evaluate(() =>
-    Object.defineProperty(window, "localStorage", {
-      configurable: true,
-      get() {
-        throw new DOMException("Blocked", "SecurityError");
-      },
-    }),
-  );
+  appState(page).failWrites = true;
   const dialog = await settings(page);
   await dialog.getByRole("combobox", { name: "Theme" }).selectOption("light");
-  await expect(dialog.getByRole("status")).toContainText("could not save");
+  await expect(page.getByRole("alert")).toContainText("could not be saved");
   await expect(page.locator(".local-terminal")).toHaveCSS(
     "background-color",
     "rgb(250, 250, 250)",
@@ -227,28 +216,16 @@ test("corrupt and unavailable browser storage leave appearance usable", async ({
   expect(errors).toEqual([]);
 });
 
-test("appearance changes and reset propagate between browser tabs", async ({
-  page,
-  context,
-}) => {
-  await page.emulateMedia({ colorScheme: "dark" });
+test("saved appearance is restored by a later view without browser storage", async ({ page }) => {
   await open(page, "/");
-  const other = await context.newPage();
-  await other.emulateMedia({ colorScheme: "dark" });
-  await open(other, "/");
   const dialog = await settings(page);
   await dialog.getByRole("combobox", { name: "Theme" }).selectOption("light");
-  await expect(other.locator(".local-terminal")).toHaveCSS(
-    "background-color",
-    "rgb(250, 250, 250)",
-  );
   await dialog.getByRole("slider", { name: /Font size/ }).fill("18");
-  await expect(other.locator(".local-terminal")).toHaveCSS("font-size", "18px");
-  await page.evaluate((key) => localStorage.removeItem(key), APPEARANCE_KEY);
-  await expect(other.locator(".local-terminal")).toHaveCSS("font-size", "14px");
-  await expect(other.locator(".local-terminal")).toHaveCSS(
-    "background-color",
-    "rgb(0, 0, 0)",
-  );
-  await other.close();
+  await flushState(page);
+  await page.addInitScript(() => {
+    for (const key of ["localStorage", "sessionStorage"]) Object.defineProperty(window, key, { get() { throw new DOMException("Opaque origin", "SecurityError"); } });
+  });
+  await page.reload();
+  await expect(page.locator(".local-terminal")).toHaveCSS("font-size", "18px");
+  await expect(page.locator(".local-terminal")).toHaveCSS("background-color", "rgb(250, 250, 250)");
 });

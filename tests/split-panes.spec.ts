@@ -1,5 +1,5 @@
 import { openOutput } from "./terminal-controls";
-import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
+import { expect, test, type Page, type WebSocketRoute } from "./app-test";
 import { acceptTerminal } from "./terminal-route";
 import { delayWasmInstantiation } from "./wasm-loading";
 
@@ -8,7 +8,7 @@ async function workspace(page: Page, path: string) {
   const inputs: string[][] = [];
   const sizes: { cols: number; rows: number }[][] = [];
   const closed: number[] = [];
-  await page.routeWebSocket("**/api/terminal", (socket) => {
+  await page.routeWebSocket("**/terminal", (socket) => {
     acceptTerminal(socket);
     const index = sockets.length;
     sockets.push(socket);
@@ -140,6 +140,46 @@ test(`selecting, zooming, and closing panes retains other shell instances`, asyn
   await expect.poll(() => h.closed).toEqual([0]);
   await expect(h.panel(2)).toContainText("retained hidden output");
   expect(h.sockets).toHaveLength(3);
+});
+
+test("a terminal pane fills its resized viewport before the frame is painted", async ({
+  page,
+}) => {
+  await workspace(page, "/");
+  const samples = await page.evaluateHandle(() => {
+    const viewport = document.querySelector("main")!.firstElementChild!;
+    const samples: { viewport: number[]; pane: number[] }[] = [];
+    // Observe after the browser's resize delivery, before its next paint.
+    new ResizeObserver(() =>
+      queueMicrotask(() => {
+        const pane = document
+          .querySelector('[role="tabpanel"]')!
+          .getBoundingClientRect();
+        samples.push({
+          viewport: [viewport.clientWidth, viewport.clientHeight],
+          pane: [pane.width, pane.height],
+        });
+      }),
+    ).observe(viewport);
+    return samples;
+  });
+  for (let i = 0; i < 8; i++) {
+    const count = await samples.evaluate((samples) => samples.length);
+    await page.setViewportSize({
+      width: i % 2 ? 1440 : 1040,
+      height: i % 2 ? 960 : 810,
+    });
+    await expect
+      .poll(() => samples.evaluate((samples) => samples.length))
+      .toBeGreaterThan(count);
+  }
+  const stale = await samples.evaluate((samples) =>
+    samples.filter(({ viewport, pane }) =>
+      viewport.some((extent, axis) => Math.abs(extent - pane[axis]) > 1),
+    ),
+  );
+  expect(stale).toEqual([]);
+  await samples.dispose();
 });
 
 test(`pointer and keyboard dividers resize live PTYs within pane bounds`, async ({

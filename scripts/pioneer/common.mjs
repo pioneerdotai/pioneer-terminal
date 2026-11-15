@@ -97,3 +97,24 @@ export async function packagePath(directory, path) {
   }
   return absolute;
 }
+
+// Matches pioneer-packages' canonical member snapshot, including directory modes.
+export async function treeDigest(directory) {
+  const entries = [];
+  async function visit(path, key) {
+    const stat = await lstat(path);
+    if (!stat.isDirectory() && !stat.isFile()) throw new Error(`Invalid payload member: ${key}`);
+    entries.push({ path, key, stat });
+    if (stat.isDirectory()) for (const name of await readdir(path)) await visit(join(path, name), key ? `${key}/${name}` : name);
+  }
+  await visit(directory, "");
+  entries.sort((a, b) => Buffer.compare(Buffer.from(a.key), Buffer.from(b.key)));
+  const hash = createHash("sha256").update("pioneer-plugin-tree-v1\0");
+  const u64 = (value) => { const bytes = Buffer.alloc(8); bytes.writeBigUInt64LE(BigInt(value)); return bytes; };
+  for (const { path, key, stat } of entries) {
+    const mode = Buffer.alloc(4); mode.writeUInt32LE(stat.mode & 0o777);
+    hash.update(u64(Buffer.byteLength(key))).update(key).update(stat.isDirectory() ? "d" : "f").update(mode);
+    if (stat.isFile()) hash.update(u64(stat.size)).update(await readFile(path));
+  }
+  return hash.digest("hex");
+}

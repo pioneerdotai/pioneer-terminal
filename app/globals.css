@@ -6,6 +6,8 @@
 }
 
 :root {
+  --font-sans: system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
   --background: #000;
   --foreground: #ededed;
 }

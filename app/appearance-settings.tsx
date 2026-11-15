@@ -1,5 +1,8 @@
 "use client";
 
+import { backendStorage } from "../lib/browser-state";
+import { hostPalette, subscribeTheme } from "../lib/host-theme";
+
 import {
   useId,
   useRef,
@@ -25,21 +28,19 @@ function createAppearanceStore() {
     saved: boolean;
   };
   let snapshot: Snapshot | null = null;
-  let storage: Storage | null = null;
   const listeners = new Set<() => void>();
   const resolve = (appearance: Appearance) =>
     appearance.theme === "system"
-      ? matchMedia("(prefers-color-scheme: dark)").matches
+      ? hostPalette()?.appearance ?? (matchMedia("(prefers-color-scheme: dark)").matches
         ? "dark"
-        : "light"
+        : "light")
       : appearance.theme;
   const getSnapshot = (): Snapshot => {
     if (snapshot) return snapshot;
     let appearance = { ...DEFAULT_APPEARANCE };
     let saved = true;
     try {
-      storage = localStorage;
-      appearance = readAppearance(storage.getItem(APPEARANCE_KEY));
+      appearance = readAppearance(backendStorage.getItem(APPEARANCE_KEY));
     } catch {
       saved = false;
     }
@@ -59,28 +60,20 @@ function createAppearanceStore() {
         if (value.theme !== resolve(value.appearance))
           publish(value.appearance, value.saved);
       };
-      const changedStorage = (event: StorageEvent) => {
-        if (
-          storage &&
-          event.storageArea === storage &&
-          (event.key === null || event.key === APPEARANCE_KEY)
-        )
-          publish(readAppearance(event.newValue), true);
-      };
+      const unsubscribeTheme = subscribeTheme(() => { const value = getSnapshot(); publish(value.appearance, value.saved); });
       getSnapshot();
       change();
       media.addEventListener("change", change);
-      window.addEventListener("storage", changedStorage);
       return () => {
         listeners.delete(listener);
+        unsubscribeTheme();
         media.removeEventListener("change", change);
-        window.removeEventListener("storage", changedStorage);
       };
     },
     update(appearance: Appearance) {
       let saved = true;
       try {
-        localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance));
+        backendStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance));
       } catch {
         saved = false;
       }

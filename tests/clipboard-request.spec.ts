@@ -1,4 +1,4 @@
-import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
+import { expect, test, type Page, type WebSocketRoute } from "./app-test";
 import { acceptTerminal, terminalReady } from "./terminal-route";
 
 function request(text: string) {
@@ -26,7 +26,7 @@ async function openTerminal(page: Page, stub = true) {
     });
   let socket: WebSocketRoute;
   const input: string[] = [];
-  await page.routeWebSocket("**/api/terminal", (ws) => {
+  await page.routeWebSocket("**/terminal", (ws) => {
     acceptTerminal(ws);
     socket = ws;
     ws.onMessage((raw) => {

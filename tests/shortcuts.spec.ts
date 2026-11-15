@@ -1,4 +1,5 @@
-import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
+import { appState } from "./app-test";
+import { expect, test, type Page, type WebSocketRoute } from "./app-test";
 import { acceptTerminal, terminalReady } from "./terminal-route";
 import { delayWasmInstantiation } from "./wasm-loading";
 import {
@@ -24,7 +25,7 @@ async function open(page: Page, path: string) {
   const sockets: WebSocketRoute[] = [],
     inputs: string[][] = [],
     closed: number[] = [];
-  await page.routeWebSocket("**/api/terminal", (socket) => {
+  await page.routeWebSocket("**/terminal", (socket) => {
     acceptTerminal(socket);
     const index = sockets.length;
     sockets.push(socket);
@@ -71,10 +72,7 @@ async function closeSettings(page: Page) {
   ).toBeFocused();
 }
 async function seed(page: Page, shortcuts = custom) {
-  await page.addInitScript(
-    ({ key, value }) => localStorage.setItem(key, JSON.stringify(value)),
-    { key: SHORTCUTS_KEY, value: shortcuts },
-  );
+  appState(page).values.set(SHORTCUTS_KEY, JSON.stringify(shortcuts));
 }
 
 test(`saved shortcuts operate sessions and panes without sending commands or repeating actions`, async ({
@@ -292,41 +290,16 @@ test("closing shortcut settings does not reclaim focus after a terminal is selec
   await expect(input(page, 1)).toBeFocused();
 });
 
-test("preferences synchronize across tabs and remain usable when storage is blocked", async ({
-  page,
-  context,
-}) => {
+test("backend persistence failure leaves changed shortcuts usable", async ({ page }) => {
   await open(page, "/");
-  const other = await context.newPage();
-  await open(other, "/");
   await settings(page);
-  await record(page, "Find in terminal", "Control+Shift+g");
-  await expect(
-    other.getByRole("button", { name: "Find", exact: true }),
-  ).toHaveAttribute("aria-keyshortcuts", "Control+Shift+G");
-  await page.evaluate((key) => localStorage.removeItem(key), SHORTCUTS_KEY);
-  await expect(
-    other.getByRole("button", { name: "Find", exact: true }),
-  ).toHaveAttribute("aria-keyshortcuts", "Meta+F Control+Shift+F");
-  await page.evaluate(() =>
-    Object.defineProperty(window, "localStorage", {
-      configurable: true,
-      get() {
-        throw new DOMException("Blocked", "SecurityError");
-      },
-    }),
-  );
+  appState(page).failWrites = true;
   await record(page, "Find in terminal", "Control+Shift+h");
-  await expect(dialog(page).getByRole("status")).toContainText(
-    "could not save",
-  );
+  await expect(page.getByRole("alert")).toContainText("could not be saved");
   await closeSettings(page);
   await input(page, 1).focus();
   await page.keyboard.press("Control+Shift+h");
-  await expect(
-    page.getByRole("textbox", { name: "Find in terminal" }),
-  ).toBeFocused();
-  await other.close();
+  await expect(page.getByRole("textbox", { name: "Find in terminal" })).toBeFocused();
 });
 
 test("closing the last session leaves keyboard access to a new shell", async ({

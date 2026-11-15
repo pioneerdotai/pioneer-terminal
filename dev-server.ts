@@ -8,16 +8,16 @@ import { startServer } from "./server";
 const sessions = new TerminalSessions(spawnShell);
 const wss = new WebSocketServer({
   noServer: true,
-  maxPayload: INPUT_LIMIT + CONTROL_RESERVE,
+  maxPayload: INPUT_LIMIT * 6 + CONTROL_RESERVE,
 });
 startServer({
-  upgrade(req, socket, head) {
+  upgrade(req, socket, head, owner) {
     const origin = `http://${process.env.HOST || "127.0.0.1"}:${process.env.PORT || "3000"}`;
     if (req.headers.origin !== origin) {
       socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
       return;
     }
-    wss.handleUpgrade(req, socket, head, (ws) => sessions.accept(ws));
+    wss.handleUpgrade(req, socket, head, (ws) => sessions.accept(ws, owner));
   },
   close() {
     sessions.close();

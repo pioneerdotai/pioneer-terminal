@@ -1,12 +1,19 @@
-Download the **pioneer-terminal-*.tar.gz** asset below. It contains the App manifest,
-icons and prebuilt Linux x64/arm64 payloads. The adjacent `.sha256` file verifies
-the downloaded archive. The automatically generated source-code archives are not
-application packages.
+Terminal 0.1.0 for Pioneer Gateway.
 
-This package targets Pioneer's managed Node 26 runtime. It contains no Node
-installation, sandbox image, local PTY service or runtime build tools.
+Download **pioneer-terminal-0.1.0.tar.gz** and its adjacent `.sha256` file.
+Extract the archive and install the `terminal-0.1.0` directory, or use the
+packaged archive with Gateway's App installer. GitHub's automatic source archives
+are not installable App packages.
 
-Full Gateway installation and host terminal routing are still under development.
-The package is published for inspection and upcoming integration; an existing
-minimal Apps installer cannot yet execute it. Runtime/integration tests have not
-been run as part of this packaging workflow.
+The package contains checksummed Linux amd64 and arm64 payload directories for
+Pioneer's managed Node 26 runtime. It includes no Node installation, sandbox
+image, local PTY service or runtime build tools. Both payloads support clients
+on macOS, Linux and Windows; the Gateway provides the host PTYs.
+
+This release uses the current Apps runtime and Host API contract. Gateway
+provides execution credentials and authenticated user identity; no separate App
+consent/grant step is required. Settings, layouts and session recovery are
+personal to each user within the workspace installation.
+
+Includes pushed terminal output, bounded input and resize handling, UTF-8 input,
+clipboard handling, persistent preferences and host theme integration.

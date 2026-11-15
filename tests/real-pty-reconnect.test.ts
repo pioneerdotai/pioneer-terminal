@@ -53,7 +53,7 @@ test(
       };
     });
     const server = new WebSocketServer({ port: 0, host: "127.0.0.1" });
-    server.on("connection", (socket) => sessions.accept(socket));
+    server.on("connection", (socket) => sessions.accept(socket, "A".repeat(21)));
     await once(server, "listening");
     const address = server.address();
     assert.ok(address && typeof address !== "string");

@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  assetPrefix: ".",
   // Debian/glibc target: omit the alternative musl image libraries.
   outputFileTracingExcludes: {
     "**": ["**/node_modules/@img/*linuxmusl*/**"],

@@ -1,18 +1,26 @@
-import { cp, mkdir, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
-import { json, option, root, writeJson } from "./common.mjs";
+import { chmod, cp, mkdir, rm, writeFile } from "node:fs/promises";
+import { join, resolve, sep } from "node:path";
+import { json, option, root, run, treeDigest, writeJson } from "./common.mjs";
 import { copyMetadata, metadata, sha256 } from "./package.mjs";
 
 const input = resolve(option("--input") ?? join(root, "dist/pioneer-targets"));
 const info = await metadata();
-const output = join(
+const output = resolve(option("--output") ?? join(
   root,
   "dist/pioneer",
   `${info.app.slug}-${info.app.version}`,
-);
-if (input === output || input.startsWith(`${output}/`))
-  throw new Error("Input cannot be inside output");
-const targets = ["linux-x64", "linux-arm64"];
+));
+if (
+  output === root || root.startsWith(`${output}${sep}`) ||
+  input === output || input.startsWith(`${output}${sep}`) ||
+  output.startsWith(`${input}${sep}`)
+)
+  throw new Error("Output must be separate from the source root and input artifacts");
+const selectedTarget = option("--target");
+const supportedTargets = ["linux-x64", "linux-arm64"];
+if (selectedTarget && !supportedTargets.includes(selectedTarget))
+  throw new Error(`Unsupported target: ${selectedTarget}`);
+const targets = selectedTarget ? [selectedTarget] : supportedTargets;
 const builds = [];
 for (const target of targets) {
   const directory = join(input, target);
@@ -35,7 +43,9 @@ for (const target of targets) {
     throw new Error(`Artifact comes from a different source commit: ${target}`);
   }
   const archive = `${info.app.slug}-${info.app.version}-${target}.tar.gz`;
-  if (info.app.runtime.artifacts[target] !== `./runtime-artifacts/${archive}`) {
+  const architecture = target === "linux-x64" ? "linux/amd64" : "linux/arm64";
+  const expectedPath = target === "linux-x64" ? "runtime-artifacts/linux-amd64" : "runtime-artifacts/linux-arm64";
+  if (info.app.runtime.artifacts[architecture]?.path !== expectedPath) {
     throw new Error(`Manifest artifact path mismatch: ${target}`);
   }
   if (
@@ -54,36 +64,32 @@ for (const target of targets) {
 }
 await rm(output, { recursive: true, force: true });
 await copyMetadata(output, info);
-await mkdir(join(output, "runtime-artifacts"));
+await mkdir(join(output, "runtime"), { recursive: true, mode: 0o755 });
+await chmod(join(output, "runtime"), 0o755);
+await cp(join(root, "packaging/start.cjs"), join(output, "runtime/start.cjs"));
+await chmod(join(output, "runtime/start.cjs"), 0o644);
+await mkdir(join(output, "runtime-artifacts"), { mode: 0o755 });
 const artifacts = {};
 for (const build of builds) {
-  await cp(
-    join(build.directory, build.archive),
-    join(output, "runtime-artifacts", build.archive),
-  );
-  await cp(
-    join(build.directory, "files.json"),
-    join(output, "runtime-artifacts", `${build.target}.files.json`),
-  );
-  artifacts[build.target] = {
-    archive: `runtime-artifacts/${build.archive}`,
-    sha256: build.archiveSha256,
-    files: `runtime-artifacts/${build.target}.files.json`,
-    node: build.node,
-    nodeModulesABI: build.nodeModulesABI,
-    sourceCommit: build.sourceCommit,
-    unpackedBytes: build.unpackedBytes,
+  const architecture = build.target === "linux-x64" ? "linux/amd64" : "linux/arm64";
+  const member = info.app.runtime.artifacts[architecture];
+  await run("python3", [join(root, "scripts/pioneer/extract-runtime.py"), join(build.directory, build.archive), join(build.directory, "files.json"), join(output, member.path)]);
+  member.sha256 = await treeDigest(join(output, member.path));
+  artifacts[architecture] = {
+    path: member.path, sha256: member.sha256,
+    node: build.node, nodeModulesABI: build.nodeModulesABI,
+    sourceCommit: build.sourceCommit, unpackedBytes: build.unpackedBytes,
     runtimeFileCount: build.runtimeFileCount,
-    dependencyTrace: `runtime-artifacts/${build.target}.dependency-trace.json`,
-    packagingStats: `runtime-artifacts/${build.target}.packaging-stats.json`,
   };
-  for (const name of ["dependency-trace", "packaging-stats"]) {
-    await cp(
-      join(build.directory, `${name}.json`),
-      join(output, "runtime-artifacts", `${build.target}.${name}.json`),
-    );
+  // Keep build provenance outside the execution payload.
+  for (const name of ["files", "dependency-trace", "packaging-stats"]) {
+    await cp(join(build.directory, `${name}.json`), join(output, `${build.target}.${name}.json`));
   }
 }
+info.app.runtime.artifacts = Object.fromEntries(
+  Object.keys(artifacts).map((architecture) => [architecture, info.app.runtime.artifacts[architecture]]),
+);
+await writeJson(join(output, "app.json"), info.app);
 await writeJson(join(output, "build-info.json"), {
   slug: info.app.slug,
   version: info.app.version,

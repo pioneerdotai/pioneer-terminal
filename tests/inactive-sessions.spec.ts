@@ -1,5 +1,5 @@
 import { acceptTerminal } from "./terminal-route";
-import { expect, test, type WebSocketRoute } from "@playwright/test";
+import { expect, test, type WebSocketRoute } from "./app-test";
 
 test(`eight sessions consume output while only the active terminal paints`, async ({
   page,
@@ -8,7 +8,7 @@ test(`eight sessions consume output while only the active terminal paints`, asyn
   const sent: number[] = [];
   const consumed: number[] = [];
   const inputs: string[][] = [];
-  await page.routeWebSocket("**/api/terminal", (socket) => {
+  await page.routeWebSocket("**/terminal", (socket) => {
     acceptTerminal(socket);
     const index = sockets.length;
     sockets.push(socket);

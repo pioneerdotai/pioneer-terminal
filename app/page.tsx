@@ -1,5 +1,5 @@
-import { SessionWorkspace } from "./session-workspace";
+import { GatewayWorkspace } from "./gateway-workspace";
 
-export default function LocalTerminal() {
-  return <SessionWorkspace />;
+export default function Terminal() {
+  return <GatewayWorkspace />;
 }

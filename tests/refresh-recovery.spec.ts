@@ -1,4 +1,5 @@
-import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
+import { appState, flushState } from "./app-test";
+import { expect, test, type Page, type WebSocketRoute } from "./app-test";
 import type { TerminalCore } from "@wterm/core";
 
 async function server(page: Page) {
@@ -7,7 +8,7 @@ async function server(page: Page) {
   const inputs: { id: number; data: string }[] = [];
   let acknowledged = 0;
   const sessions = new Map<string, number>();
-  await page.routeWebSocket("**/api/terminal", (socket) => {
+  await page.routeWebSocket("**/terminal", (socket) => {
     let session: string;
     socket.onMessage((raw) => {
       const message = JSON.parse(raw.toString());
@@ -88,7 +89,7 @@ test("expired sessions do not silently start replacement shells", async ({
   page,
 }) => {
   let attachments = 0;
-  await page.routeWebSocket("**/api/terminal", (socket) => {
+  await page.routeWebSocket("**/terminal", (socket) => {
     socket.onMessage((raw) => {
       const message = JSON.parse(raw.toString());
       if (message.type !== "attach") return;
@@ -124,12 +125,10 @@ test("corrupt replay cannot start a replacement shell on reload", async ({
   await expect(terminal(page)).toBeFocused();
   h.sockets[0].send(Buffer.from("before reload"));
   await expect.poll(h.ack).toBe(13);
-  await page.evaluate(() => {
-    const key = Object.keys(sessionStorage).find((key) =>
-      key.endsWith("session-1.0"),
-    )!;
-    sessionStorage.setItem(key, "invalid");
-  });
+  await flushState(page);
+  const values = appState(page).values;
+  const key = [...values.keys()].find((key) => key.endsWith("session-1.0"))!;
+  values.set(key, "invalid");
   await page.reload();
   await expect(
     page.getByText(
@@ -139,38 +138,19 @@ test("corrupt replay cannot start a replacement shell on reload", async ({
   expect(h.attaches).toHaveLength(1);
 });
 
-test("storage denial disables recovery while output and input keep working", async ({
-  page,
-}) => {
+test("backend write denial reports failure while live output and input keep working", async ({ page }) => {
   const h = await server(page);
   await page.goto("/");
   await expect(terminal(page)).toBeFocused();
   await expect.poll(() => h.attaches.length).toBe(1);
-  await page.evaluate(() => {
-    const original = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key, value) {
-      if (this === sessionStorage && key.includes("recovery"))
-        throw new DOMException("Quota exceeded", "QuotaExceededError");
-      original.call(this, key, value);
-    };
-  });
+  await flushState(page);
+  appState(page).failWrites = true;
   h.sockets[0].send(Buffer.from("live output"));
   await expect(grid(page)).toContainText("live output");
-  await expect(
-    page.getByText(
-      "Refresh recovery is unavailable for this session. Keep this page open to continue using it.",
-    ),
-  ).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("could not be saved");
   await terminal(page).focus();
   await page.keyboard.type("still-live");
   expect(h.inputs.map((value) => value.data).join("")).toBe("still-live");
-  await page.reload();
-  await expect(
-    page.getByText(
-      "This session could not be restored. Open a new terminal to start another shell.",
-    ),
-  ).toBeVisible();
-  expect(h.attaches).toHaveLength(1);
 });
 
 async function state(page: Page) {
@@ -373,7 +353,7 @@ test("reload keeps surviving tab identities and never reopens explicitly closed 
   expect(h.attaches[5]).toMatchObject({ session: null, bytes: 0 });
 });
 
-test("normal navigation starts independently from saved reload records", async ({
+test("a later view resumes the same App execution workspace", async ({
   page,
 }) => {
   const h = await server(page);
@@ -381,10 +361,11 @@ test("normal navigation starts independently from saved reload records", async (
   await expect.poll(() => h.attaches.length).toBe(1);
   h.sockets[0].send(Buffer.from("old shell"));
   await expect(grid(page)).toContainText("old shell");
+  await flushState(page);
   await page.goto("/?fresh");
   await expect.poll(() => h.attaches.length).toBe(2);
-  expect(h.attaches[1]).toMatchObject({ session: null, bytes: 0 });
-  await expect(grid(page)).not.toContainText("old shell");
+  expect(h.attaches[1]).toMatchObject({ session: h.attaches[0].session ?? "a".repeat(64), bytes: 9 });
+  await expect(grid(page)).toContainText("old shell");
 });
 
 test("replayed theme changes preserve terminal state and use the current appearance", async ({

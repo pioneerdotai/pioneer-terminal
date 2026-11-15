@@ -1,6 +1,9 @@
 "use client";
 
-import { createPortal } from "react-dom";
+import { backendStorage, executionId } from "../lib/browser-state";
+import { workspaceColors } from "../lib/host-theme";
+
+import { createPortal, flushSync } from "react-dom";
 import {
   useCallback,
   useEffect,
@@ -11,6 +14,7 @@ import {
   useState,
   useSyncExternalStore,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
 } from "react";
 import {
@@ -217,7 +221,9 @@ function SessionTerminal({
   useEffect(() => {
     let cancelled = false;
     onStatus(session.id, "loading");
-    GhosttyCore.load({ wasmPath: "/ghostty-vt.wasm" })
+    GhosttyCore.load({
+      wasmPath: new URL("ghostty-vt.wasm", document.baseURI).href,
+    })
       .then((loadedCore) => {
         if (cancelled) {
           disposeCore(loadedCore);
@@ -226,7 +232,10 @@ function SessionTerminal({
         }
       })
       .catch(() => {
-        if (!cancelled) onStatus(session.id, "closed");
+        if (!cancelled) {
+          setConnectionMessage("Terminal engine could not be loaded. Close and reopen the App to retry.");
+          onStatus(session.id, "closed");
+        }
       });
 
     return () => {
@@ -342,8 +351,8 @@ function SessionTerminal({
         connectFrameRef.current = null;
         if (disposedRef.current || wsRef.current) return;
 
-        const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-        const wsUrl = `${proto}//${window.location.host}/api/terminal`;
+        const wsUrl = new URL("terminal", document.baseURI);
+        wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
         onStatus(session.id, "connecting");
         let restoredConnection = !!saved;
         const connection = new TerminalConnection(
@@ -399,6 +408,49 @@ function SessionTerminal({
     wsRef.current?.input(data);
   }, []);
 
+  const [copyStatus, setCopyStatus] = useState("");
+  const handleCopyKey = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (
+      event.defaultPrevented ||
+      !event.nativeEvent.isTrusted ||
+      event.nativeEvent.isComposing ||
+      event.altKey ||
+      !(event.metaKey || event.ctrlKey) ||
+      !(event.code === "KeyC" || event.key.toLowerCase() === "c")
+    ) return;
+    const terminal = terminalRef.current;
+    if (
+      !terminal ||
+      !(event.target instanceof Node) ||
+      !terminal.element.contains(event.target)
+    ) return;
+    const text = terminal.getSelectionText();
+    if (!text) return; // No selection: Ctrl-C remains shell interruption.
+    event.preventDefault();
+    event.stopPropagation();
+    const document = terminal.element.ownerDocument;
+    let copied = false;
+    const writeSelection = (copy: ClipboardEvent) => {
+      if (!copy.clipboardData) return;
+      copy.clipboardData.setData("text/plain", text);
+      copy.preventDefault();
+      copied = true;
+    };
+    // Supply the terminal's cell-accurate selection during the trusted copy
+    // gesture. execCommand may return false for custom selection even after
+    // its copy event was handled, so observe the event rather than its return.
+    document.addEventListener("copy", writeSelection, true);
+    try {
+      document.execCommand("copy");
+      if (!copied) throw new Error("Copy unavailable");
+      setCopyStatus("");
+    } catch {
+      setCopyStatus("Copy failed. Try the desktop Edit → Copy action.");
+    } finally {
+      document.removeEventListener("copy", writeSelection, true);
+    }
+  }, []);
+
   const [clipboardRequest, setClipboardRequest] =
     useState<ClipboardWriteRequest | null>(null);
   const handleClipboardWrite = useCallback((text: string) => {
@@ -422,13 +474,18 @@ function SessionTerminal({
   if (!core) {
     return (
       <div className="flex h-full items-center justify-center bg-(--workspace-bg) text-xs text-(--workspace-muted)">
-        Loading terminal…
+        {connectionMessage ?? "Loading terminal…"}
       </div>
     );
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col" onKeyDownCapture={handleCopyKey}>
+      {copyStatus && (
+        <p role="status" className="pb-2 text-xs text-(--workspace-muted)">
+          {copyStatus}
+        </p>
+      )}
       {recoveryFailed && session.status !== "closed" && (
         <p role="status" className="pb-2 text-xs text-(--workspace-muted)">
           Refresh recovery is unavailable for this session. Keep this page open
@@ -662,16 +719,11 @@ export function SessionWorkspace() {
     let recovery: SessionRecovery | null = null;
     return () => {
       if (!recovery) {
-        let storage: Storage | null = null;
-        try {
-          storage = window.sessionStorage;
-        } catch {}
-        const navigation = performance.getEntriesByType("navigation")[0] as
-          PerformanceNavigationTiming | undefined;
+        const key = `${RECOVERY_KEY}:${executionId()}`;
         recovery = new SessionRecovery(
-          storage,
-          `${RECOVERY_KEY}:${location.pathname}`,
-          navigation?.type === "reload" || navigation?.type === "back_forward",
+          backendStorage,
+          key,
+          backendStorage.getItem(key) !== null,
         );
       }
       return recovery;
@@ -786,7 +838,8 @@ function ReadyWorkspace({ recovery }: { recovery: SessionRecovery }) {
       );
     };
     measure();
-    const observer = new ResizeObserver(measure);
+    // Apply measured pane geometry before this resize is painted.
+    const observer = new ResizeObserver(() => flushSync(measure));
     observer.observe(viewport);
     return () => observer.disconnect();
   }, []);
@@ -823,6 +876,7 @@ function ReadyWorkspace({ recovery }: { recovery: SessionRecovery }) {
   return (
     <div
       data-theme={appearanceReady ? theme : "system"}
+      style={appearance.theme === "system" ? workspaceColors() : undefined}
       className="workspace flex h-dvh w-screen flex-col overflow-hidden bg-(--workspace-bg) text-(--workspace-fg)"
       onCompositionStartCapture={() => {
         composing.current = true;

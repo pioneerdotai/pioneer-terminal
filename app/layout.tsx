@@ -1,29 +1,24 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
 
-const geist = Geist({
-  variable: "--font-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "wterm — Local Shell",
-  description: "Browser-based local terminal powered by wterm",
+  title: "Pioneer Terminal",
+  description: "Host terminal sessions through Pioneer Gateway",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const reference = (await headers()).get("Pioneer-App-Base-Path") ?? "./";
+  const base = /^(?:\.\/|(?:\.\.\/)+)$/.test(reference) ? reference : "./";
   return (
-    <html lang="en" className={`${geist.variable} ${geistMono.variable}`}>
+    <html lang="en">
+      <head>
+        <base href={base} />
+      </head>
       <body className="min-h-screen antialiased">{children}</body>
     </html>
   );

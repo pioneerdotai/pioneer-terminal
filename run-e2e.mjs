@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -31,9 +34,11 @@ function launch(args, env) {
   return result;
 }
 
+const data = await mkdtemp(join(tmpdir(), "terminal-browser-tests-"));
 const server = launch(["--import", "tsx", "dev-server.ts"], {
   ...process.env,
   NODE_ENV: "production",
+  APP_DATA: data,
   HOST: "127.0.0.1",
   PORT: String(port),
 });
@@ -106,4 +111,5 @@ try {
   }
 } finally {
   await stop();
+  await rm(data, { recursive: true, force: true });
 }

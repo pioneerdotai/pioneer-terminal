@@ -1,6 +1,6 @@
 import { openOutput } from "./terminal-controls";
 import { acceptTerminal, terminalReady } from "./terminal-route";
-import { expect, test, type WebSocketRoute } from "@playwright/test";
+import { expect, test, type WebSocketRoute } from "./app-test";
 import {
   INPUT_LIMIT,
   OUTPUT_CHUNK,
@@ -36,7 +36,7 @@ test(`bounded output drains through synchronized drawing and accepts input durin
       socket.send(chunk);
     }
   };
-  await page.routeWebSocket("**/api/terminal", (ws) => {
+  await page.routeWebSocket("**/terminal", (ws) => {
     acceptTerminal(ws);
     socket = ws;
     ws.onMessage((data) => {
@@ -75,7 +75,7 @@ test("oversized output closes the connection and reports the failure", async ({
 }) => {
   let socket: WebSocketRoute;
   let closed = false;
-  await page.routeWebSocket("**/api/terminal", (ws) => {
+  await page.routeWebSocket("**/terminal", (ws) => {
     acceptTerminal(ws);
     socket = ws;
     ws.onClose(() => {
@@ -100,7 +100,7 @@ test("an oversized paste is rejected visibly and typing can continue", async ({
 }) => {
   const input: string[] = [];
   let connected = false;
-  await page.routeWebSocket("**/api/terminal", (ws) => {
+  await page.routeWebSocket("**/terminal", (ws) => {
     acceptTerminal(ws);
     ws.onMessage((data) => {
       const message = JSON.parse(data.toString());

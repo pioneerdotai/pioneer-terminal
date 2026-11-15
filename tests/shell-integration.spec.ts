@@ -1,4 +1,4 @@
-import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
+import { expect, test, type Page, type WebSocketRoute } from "./app-test";
 import { acceptTerminal, terminalReady } from "./terminal-route";
 
 const marker = (value: string) => `\x1b]133;${value}\x07`;
@@ -11,7 +11,7 @@ async function open(page: Page, path = "/") {
   const sockets: WebSocketRoute[] = [],
     received: string[] = [],
     acknowledgments: number[] = [];
-  await page.routeWebSocket("**/api/terminal", (socket) => {
+  await page.routeWebSocket("**/terminal", (socket) => {
     acceptTerminal(socket);
     const index = sockets.length;
     sockets.push(socket);

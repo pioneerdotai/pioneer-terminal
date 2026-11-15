@@ -84,7 +84,7 @@ for (const reload of [false, true])
           }
           Reflect.apply(send, socket, [data, ...args]);
         };
-        sessions.accept(socket);
+        sessions.accept(socket, "A".repeat(21));
       });
       await once(server, "listening");
       const address = server.address();

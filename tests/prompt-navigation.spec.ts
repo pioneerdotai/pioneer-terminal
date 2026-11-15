@@ -1,4 +1,5 @@
-import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
+import { appState } from "./app-test";
+import { expect, test, type Page, type WebSocketRoute } from "./app-test";
 import { acceptTerminal, terminalReady } from "./terminal-route";
 
 const marker = (value: string) => `\x1b]133;${value}\x07`;
@@ -37,16 +38,10 @@ async function open(page: Page, shellIntegration = true) {
   const sockets: WebSocketRoute[] = [],
     received: string[] = [];
   const acknowledgments: number[] = [];
-  await page.addInitScript(() => {
-    localStorage.setItem(
-      "wterm.local.shortcuts.v1",
-      JSON.stringify({
-        previousPrompt: ["Control+Shift+ArrowUp"],
-        nextPrompt: ["Control+Shift+ArrowDown"],
-      }),
-    );
-  });
-  await page.routeWebSocket("**/api/terminal", (socket) => {
+  appState(page).values.set("wterm.local.shortcuts.v1", JSON.stringify({
+    previousPrompt: ["Control+Shift+ArrowUp"], nextPrompt: ["Control+Shift+ArrowDown"],
+  }));
+  await page.routeWebSocket("**/terminal", (socket) => {
     acceptTerminal(socket);
     const index = sockets.length;
     sockets.push(socket);

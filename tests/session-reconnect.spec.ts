@@ -1,4 +1,4 @@
-import { expect, test, type WebSocketRoute } from "@playwright/test";
+import { expect, test, type WebSocketRoute } from "./app-test";
 
 test(`resumes the existing parser through split Unicode and synchronized alternate-screen output`, async ({
   page,
@@ -19,7 +19,7 @@ test(`resumes the existing parser through split Unicode and synchronized alterna
   let acceptedInput = 0;
   let acknowledged = 0;
   let seeded = false;
-  await page.routeWebSocket("**/api/terminal", (socket) => {
+  await page.routeWebSocket("**/terminal", (socket) => {
     const index = sockets.length;
     sockets.push(socket);
     socket.onMessage((raw) => {
@@ -111,7 +111,7 @@ test("an unavailable session reports the loss without starting another shell", a
   page,
 }) => {
   const attachments: unknown[] = [];
-  await page.routeWebSocket("**/api/terminal", (socket) => {
+  await page.routeWebSocket("**/terminal", (socket) => {
     socket.onMessage((raw) => {
       const message = JSON.parse(raw.toString());
       if (message.type === "attach") {
@@ -147,7 +147,7 @@ for (const loseInput of [false, true]) {
     let input = 0;
     let dropInput = false;
     let sized = false;
-    await page.routeWebSocket("**/api/terminal", (socket) => {
+    await page.routeWebSocket("**/terminal", (socket) => {
       const initial = sockets.length === 0;
       sockets.push(socket);
       socket.onMessage((raw) => {

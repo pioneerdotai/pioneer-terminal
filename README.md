@@ -2,7 +2,9 @@
 
 For the Pioneer application build, production artifacts and installation
 contract, see [Preparing Terminal for Pioneer](docs/pioneer-packaging.md).
-Production runs in the managed Node 26 runtime; Gateway provides host PTY sessions.
+The source integration runs in the managed Node 26 runtime and uses Gateway
+Host API for host PTYs. The published 0.10 package has no Host API client yet;
+see [integration status](docs/gateway-runtime-requirements.md).
 The local development server below provides PTYs only for development.
 
 Full local terminal in the browser, connected to your machine's shell via WebSocket and [node-pty](https://github.com/microsoft/node-pty). Use the top tab bar to create, switch between, and close independent shell sessions, and split the workspace to view up to four shells at once.
@@ -36,8 +38,8 @@ bun run build
 
 Production packaging uses `bun run build:pioneer`, `bun run package:pioneer`,
 and `bun run assemble:pioneer` on the documented Linux builders. The resulting
-package runs `node start.cjs` without Bun, tsx, node-pty, or an installation step.
-Gateway routes terminal WebSockets to its host PTY service. See the packaging
+package runs `node /app/runtime/start.cjs` without Bun, tsx, node-pty, or an installation step.
+The App backend relays its own terminal WebSockets to Gateway Host API. See the packaging
 and Gateway requirements documents before attempting an installation.
 
 `bun run lint` checks Next.js/React rules, canonical Tailwind CSS classes, and
@@ -63,9 +65,9 @@ Start editing `app/` for the interface, `lib/` for session behavior, and
 
 ## How It Works
 
-- Production `server.ts` serves Next.js HTTP; Gateway handles terminal WebSockets.
+- Production `server.ts` serves Next.js and the App-owned terminal WebSocket; its backend Host API client requests Gateway PTYs.
 - Local `dev-server.ts` supplies the PTY/session service for development; the following session behavior describes that protocol.
-- A new terminal attaches to a server session and spawns your default shell after its initial dimensions arrive
+- A new production terminal requests `/bin/sh -l` on the Gateway host after its initial dimensions arrive. Local development uses the development host shell.
 - A brief connection interruption resumes that same shell and existing browser terminal; missing output is replayed without repeating parsed bytes
 - Reloading restores split layouts, divider positions, zoom, and the focused terminal, and resumes saved shells while complete recovery records and server sessions remain available
 - The browser sends sequenced JSON input, resize, and byte acknowledgment messages over WebSocket; the server acknowledges input handed to the PTY, relays raw PTY bytes in binary frames, and sends working-directory updates as JSON
@@ -94,15 +96,15 @@ Start editing `app/` for the interface, `lib/` for session behavior, and
 | `server.ts`                    | Production HTTP server; no shell processes                                          |
 | `lib/pty-output.ts`            | Bounded output window and PTY pause/resume                                         |
 | `lib/pty-output-queue.mts`     | Bounded byte queue and small-read batching shared with the PTY input harness       |
-| `lib/terminal-sessions.ts`     | Development PTY service: session ownership, attachment tokens, replay, and expiry                           |
-| `lib/session-recovery.ts`      | Bounded tab-scoped output, resize, and theme replay records                        |
+| `lib/terminal-sessions.ts`     | App-owned session relay: attachment IDs, replay, acknowledgement and expiry                           |
+| `lib/session-recovery.ts`      | Bounded execution-scoped output, resize, and theme replay records                        |
 | `lib/terminal-connection.ts`   | Browser parsing tasks, acknowledgments, and bounded input                          |
 | `lib/terminal-protocol.ts`     | Shared message types and buffer limits                                             |
 | `app/page.tsx`                 | Single application entry point at `/`                                              |
 | `app/session-workspace.tsx`    | Top tabs and actions, split panes, Find controls, and terminal/WebSocket lifecycle |
-| `app/appearance-settings.tsx`  | Appearance dialog, OS changes, and browser persistence                             |
+| `app/appearance-settings.tsx`  | Appearance dialog, Gateway theme and backend persistence                             |
 | `lib/appearance.ts`            | Validated preferences and terminal colors                                          |
-| `app/shortcut-settings.tsx`    | Shortcut editor, browser persistence, and cross-tab updates                        |
+| `app/shortcut-settings.tsx`    | Shortcut editor and backend persistence                        |
 | `lib/shortcuts.ts`             | Command defaults, binding validation, matching, and labels                         |
 | `app/pane-divider.tsx`         | Pointer and keyboard pane resizing                                                 |
 | `lib/workspace-layout.ts`      | Session selection, split geometry, and directional focus                           |
@@ -138,13 +140,8 @@ behind a zoomed pane. Hidden sessions remain in the tab bar. Smaller windows
 keep the same arrangement with minimum pane sizes and workspace scrolling.
 Find queries are not restored.
 
-Layout is saved in this tab's `sessionStorage`, for the workspace at `/`.
-It is checked against the saved session list: missing, stale, or damaged layouts
-fall back to one pane with the first session selected, leaving the other sessions
-in the tab bar. Closed sessions stay closed. A layout storage failure shows a
-status and leaves live terminals and their replay records available. Ordinary
-navigation or a new tab starts a fresh workspace; layout recovery uses the same
-session limits described below.
+Layout is saved through the App backend in `APP_DATA`, scoped to the current
+backend execution. Opaque WebViews do not require browser storage.
 
 ## Shell command indicators
 
@@ -221,13 +218,12 @@ Open **Appearance** in the Terminal actions (⋯) menu to choose **System**, **D
 or **Light**, and a terminal font size from 10 to 32 px. Changes apply to existing,
 hidden, and new panes without restarting shells or clearing output. Font changes
 resize the terminal grid and report its new dimensions to the PTY. **System**
-follows OS appearance changes; **Reset defaults** restores System and 14 px.
+follows Gateway appearance (OS appearance in standalone development); **Reset defaults** restores System and 14 px.
 Closing the dialog or pressing Escape returns focus to its opener.
 
-Appearance is saved in browser local storage and shared by other tabs on the
-same origin. Invalid saved values fall back to defaults.
-If browser storage is unavailable, changes still work for the current page and
-the dialog reports that they could not be saved. Only theme and font size are
+Appearance is saved through the App backend. Invalid saved values fall back to
+defaults. If persistence fails, live changes still work and a warning reports
+that recent state may be lost. Only theme and font size are
 stored; terminal output, session credentials, and layout are not preferences.
 Reloading restores sessions within the recovery limits described below.
 
@@ -260,8 +256,8 @@ using synchronized drawing can finish their updates. Binary framing preserves
 UTF-8 and escape sequences split across messages. Normal process exit waits
 for the final output to be consumed.
 
-Input messages, including their JSON envelope, must fit within 64 KiB. The
-browser caps both its socket send buffer and unacknowledged input at 64 KiB,
+Input messages and their JSON envelopes must fit within 16 KiB. The
+browser caps both its socket send buffer and unacknowledged input at 16 KiB,
 with at most 1,024 unacknowledged messages, including empty ones. Only message
 lengths are retained for acknowledgment tracking; input text is not queued for
 replay. A busy connection or oversized paste rejects the whole input event
@@ -284,9 +280,9 @@ the server replays only bytes after the terminal's last successfully parsed
 offset, including bytes whose acknowledgments were lost. A replacement socket
 owns input and resizing; callbacks from older sockets cannot affect the session.
 
-Detached sessions pause PTY reads and expire after 30 seconds. Retained sent
+Detached sessions pause PTY reads and expire after five minutes. Retained sent
 output is limited to the existing 128 KiB/256-frame window; pending output
-remains capped at 256 KiB/1,024 chunks. The server allows at most 32 live or
+remains capped at 256 KiB/1,024 chunks. The server allows at most 8 live or
 detached sessions. A shell that exits while detached can still deliver its final
 output after reattachment within that interval.
 
@@ -301,32 +297,31 @@ confirmed, the ended-session status preserves that uncertainty. The notice
 remains until you dismiss it, and dismissing returns focus to terminal input.
 Closing a connected session terminates its PTY and cancels pending work.
 Closing while disconnected cancels
-browser retries, and the server expires the detached PTY within 30 seconds.
+browser retries, and the server expires the detached PTY within five minutes.
 
-Reload recovery stores output bytes, every applied resize and host theme change,
-attachment credentials, and input sequence counters in this tab's
-`sessionStorage`, for the workspace at `/`. Credentials are never placed
-in URLs. Terminal output can contain sensitive information, including echoed
-commands. Closing a session removes its records; closing the browser tab removes
-the tab's storage. A normal navigation or duplicated tab starts independently.
+Reload recovery stores output bytes, sizes, themes, opaque App attachment IDs
+and input counters through the backend's `/state` route. Host API credentials
+never leave the backend. Stored output may contain sensitive command text.
+Closing a terminal removes its records. The App workspace is shared across its
+views, and backend execution changes clear stale recovery records.
 
 A new terminal replays the complete saved prefix from its initial dimensions,
 preserving modes, both screens, history, graphics, and unfinished parser input.
 Historical terminal replies and clipboard requests are not sent again. The
 connection then resumes the same PTY from the saved byte offset, with existing
-input acknowledgment and deduplication behavior. Output is saved before its
-acknowledgment permits the server to discard it. Input text is never retried.
+input acknowledgment and deduplication behavior. Output is recorded in the browser mirror before acknowledgment and batched to
+backend storage. Abrupt termination can lose an uncommitted batch; incomplete
+replay then fails explicitly. Input text is never retried.
 
-Records are limited to 1 MiB of output and 4,096 events per session, and browser
-storage quotas also apply. Reaching a limit or a storage failure disables refresh
+Records are limited to 1 MiB of output and 4,096 events per session, and the backend has a 16 MiB aggregate state bound. Reaching a limit or a storage failure disables refresh
 recovery for that session and shows a status while the live terminal continues.
 Incomplete or invalid records, expired sessions, unavailable output ranges, and
 server restarts produce an explicit failure instead of starting a replacement
-shell. Reload must reattach within the existing 30-second server grace period.
+shell. Reload must reattach within the existing five-minute server grace period.
 This is bounded replay from session start, not an unlimited terminal checkpoint
 or PTY survival across server restarts.
 
-This protocol is specific to the local example. Its client and server must be
+This browser protocol belongs to Terminal; Host API has its own typed JSON-RPC contract. Its client and server must be
 updated together; a bare `WebSocketTransport` client cannot connect directly.
 
 ## Checks
@@ -340,7 +335,7 @@ A third real-PTY case loses an input acknowledgment and a later input message,
 reattaches through the browser connection class, and verifies that accepted
 input executes once, missing input is not replayed, and new input still works.
 
-Run `bun run build`, then `bun run test:e2e` from this project directory. The browser suite starts an isolated production server and uses deterministic WebSocket output without spawning a shell. Chromium, Firefox, and WebKit cover streamed Unicode, synchronized drawing, input during output, buffer overflow, unmounted history, native read-only navigation and Copy, explicit refresh, cancellation, and focus return. Reconnection cases preserve partial UTF-8, alternate screens, synchronized drawing, terminal replies, and focus, reject disconnected input, and report an unavailable session.
+Run `bun run build`, then `bun run test:e2e` from this project directory. The browser suite starts an isolated development PTY entry point using a production Next build and uses deterministic WebSocket output without spawning a shell. Chromium, Firefox, and WebKit cover streamed Unicode, synchronized drawing, input during output, buffer overflow, unmounted history, native read-only navigation and Copy, explicit refresh, cancellation, and focus return. Reconnection cases preserve partial UTF-8, alternate screens, synchronized drawing, terminal replies, and focus, reject disconnected input, and report an unavailable session.
 
 Terminal controls live in the top bar and act on the focused pane: split right,
 split down, zoom/restore, and Find. Read output, Appearance, and Keyboard

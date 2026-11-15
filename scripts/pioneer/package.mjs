@@ -132,7 +132,6 @@ async function main() {
     });
     await cp(join(root, "next.config.mjs"), join(runtime, "next.config.mjs"));
     await cp(join(root, "build/server.cjs"), join(runtime, "server.cjs"));
-    await cp(join(root, "packaging/start.cjs"), join(runtime, "start.cjs"));
     await writeJson(join(runtime, "runtime-target.json"), {
       platform: process.platform,
       arch: process.arch,
@@ -143,8 +142,7 @@ async function main() {
       name: info.pkg.name,
       version: info.pkg.version,
       private: true,
-      scripts: { start: "node start.cjs" },
-      dependencies: { next: info.pkg.dependencies.next },
+      dependencies: { next: info.pkg.dependencies.next, ws: info.pkg.dependencies.ws },
     });
     const release = join(temporary, "release");
     await mkdir(release);

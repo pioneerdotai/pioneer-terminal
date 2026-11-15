@@ -1,13 +1,13 @@
 import { openOutput } from "./terminal-controls";
 import { acceptTerminal, terminalReady } from "./terminal-route";
-import { expect, test, type WebSocketRoute } from "@playwright/test";
+import { expect, test, type WebSocketRoute } from "./app-test";
 
 test(`reads unmounted history, preserves a snapshot, and refreshes without sending input`, async ({
   page,
 }) => {
   let socket: WebSocketRoute;
   const input: string[] = [];
-  await page.routeWebSocket("**/api/terminal", (ws) => {
+  await page.routeWebSocket("**/terminal", (ws) => {
     acceptTerminal(ws);
     socket = ws;
     ws.onMessage((message) => {
@@ -112,7 +112,7 @@ test("closing a pending capture cancels it and the reader can reopen", async ({
   page,
 }) => {
   let socket: WebSocketRoute;
-  await page.routeWebSocket("**/api/terminal", (ws) => {
+  await page.routeWebSocket("**/terminal", (ws) => {
     acceptTerminal(ws);
     socket = ws;
   });
@@ -141,7 +141,7 @@ test("failed refresh retains the previous snapshot and can be retried", async ({
   page,
 }) => {
   let socket: WebSocketRoute;
-  await page.routeWebSocket("**/api/terminal", (ws) => {
+  await page.routeWebSocket("**/terminal", (ws) => {
     acceptTerminal(ws);
     socket = ws;
   });

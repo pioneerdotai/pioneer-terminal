@@ -1,6 +1,6 @@
 {
   "name": "pioneer-terminal",
-  "version": "0.10.0",
+  "version": "0.1.0",
   "private": true,
   "scripts": {
     "predev": "node scripts/prepare-assets.mjs",
@@ -31,7 +31,8 @@
     "postcss": "^8.5.9",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "tailwindcss": "^4.3.5"
+    "tailwindcss": "^4.3.5",
+    "ws": "^8.22.2"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",
@@ -47,8 +48,7 @@
     "prettier-plugin-tailwindcss": "0.8.1",
     "tsx": "^4.19.4",
     "typescript": "^7.0.2",
-    "node-pty": "^1.0.0",
-    "ws": "^8.22.2"
+    "node-pty": "^1.0.0"
   },
   "packageManager": "bun@1.4.3",
   "engines": {

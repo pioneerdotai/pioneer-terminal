@@ -1,68 +1,69 @@
 # Building Pioneer Terminal
 
-Terminal is a production App for the managed `node` environment (Node 26,
-glibc). The Gateway selects its shared runtime image; the application does not
-bundle Node, Microsandbox, a shell, or a package manager.
+Terminal targets Gateway's managed `node` environment (Node 26 / glibc). Gateway
+selects its runtime image. The App includes no Node distribution, shell, package
+manager, Microsandbox executable or local PTY addon.
 
 ## Build and delivery
 
-The **Prepare Pioneer application** workflow builds on native Linux x64 and
-arm64 runners using a digest-pinned Node 26 / Debian Trixie builder. This matches
-the managed runtime's major version and libc baseline. Build tools run in CI,
-never on the Gateway or in its execution sandbox.
+The existing **Prepare Pioneer application** workflow builds native Linux x64 and
+arm64 payloads with a digest-pinned Node 26 / Debian Trixie builder. Bun installs
+the locked developer dependencies with scripts disabled. Next produces the UI;
+Bun bundles the production custom server. Next's pinned tracer collects its
+standalone dependencies plus the backend's `ws` transport. The two optional `ws` native acceleration addons are disabled; their absence is
+recorded explicitly by the tracer. All other unresolved dependencies fail packaging.
+Local `node-pty`,
+compilers, test runners and preview code remain outside the runtime closure.
 
-The workflow installs `bun.lock` with dependency scripts disabled, builds Next.js
-and the production server, then copies Next's standalone dependency closure and
-traces the custom server using Next's own pinned tracer. It materializes symlinks,
-omits caches and development tools, preserves executable modes, and records file
-hashes and sizes. No local PTY service, node-pty addon, or preview launcher is
-included. The build fails if such dependencies enter the runtime trace.
-
-Each architecture archive contains:
-
-```text
-runtime/
-  start.cjs
-  server.cjs
-  runtime-target.json
-  package.json
-  next.config.mjs
-  .next/
-  public/
-  node_modules/
-```
-
-Next's generated standalone `server.js` is not executed. `start.cjs` applies the
-serialized production config and starts our HTTP server. The bundle explicitly
-substitutes production mode at build time. The launcher validates Linux target,
-architecture, Node major version and ABI before loading it.
-
-Assembly checks that both artifacts share the same manifest, lockfile, icons,
-version and source revision. It produces one installable directory layout:
+Per-architecture CI artifacts are intermediate tar archives that preserve Linux
+file modes. Assembly checks source revision, manifest, lockfile, shared icons,
+version and archive checksums. A bounded indexed extractor rejects links, special
+files and unsafe paths and checks each file before producing ready directories.
+**No nested runtime archive remains in the installable App package.**
 
 ```text
-terminal-0.10.0/
+terminal-0.1.0/
   app.json
   assets/logo.png
-  build-info.json
-  SHA256SUMS
+  runtime/start.cjs
   runtime-artifacts/
-    terminal-0.10.0-linux-x64.tar.gz
-    terminal-0.10.0-linux-arm64.tar.gz
-    linux-x64.files.json
-    linux-arm64.files.json
-    # Per-target dependency traces and size reports are also retained.
+    linux-amd64/
+      server.cjs
+      runtime-target.json
+      package.json
+      next.config.mjs
+      .next/
+      public/
+      node_modules/
+    linux-arm64/
+      # Same layout, with the matching native dependency closure.
+  build-info.json
+  linux-x64.files.json
+  linux-arm64.files.json
+  # Dependency traces and packaging statistics for each target.
+  SHA256SUMS
 ```
 
-`app.json` is the runtime/UI declaration. `build-info.json` contains packaging
-provenance and integrity data, not a separate runtime contract or image selector.
-The verifier checks hashes, file sizes/modes, archive paths and file types,
-architecture metadata, ELF headers where present, and a 100 MiB unpacked size
-budget. This is artifact inspection, not execution testing or signing.
+The source manifest declares `linux/amd64` and `linux/arm64` directory members.
+Its all-zero SHA-256 fields are build-template placeholders: **the checkout cannot
+be installed**. Assembly replaces both with the exact canonical member snapshot
+digest used by `pioneer-packages`, including directory and executable file modes.
+The final verifier independently recomputes that digest and checks file indices,
+ELF architectures, Node ABI metadata and the 100 MiB budget per payload. These
+checks inspect artifact data; they do not execute the App or constitute signing.
+
+Gateway installs only the matching guest payload. It mounts that tree at
+`/payload`, the common App files at `/app`, and writable App data at `/data`.
+The manifest's `cwd: "runtime"` is a common directory disjoint from the artifact
+roots. `node /app/runtime/start.cjs` validates the selected ABI, consumes the
+private bootstrap and starts `/payload/server.cjs` with Next's serialized
+production configuration. No build or dependency installation occurs on Gateway.
+Linux guest payloads serve supported Gateway hosts; current host support is
+macOS arm64 and GNU Linux amd64/arm64, subject to Gateway virtualization gates.
 
 ## Developer commands
 
-Use Node 26 and Bun 1.4.3 on the matching native Linux build architecture:
+On Node 26 / Bun 1.4.3 and each matching native Linux build architecture:
 
 ```sh
 bun install --frozen-lockfile --ignore-scripts
@@ -70,49 +71,44 @@ bun run build:pioneer
 bun run package:pioneer
 ```
 
-After obtaining both architecture outputs under
-`dist/pioneer-targets/linux-x64/` and `dist/pioneer-targets/linux-arm64/`:
+With both outputs under `dist/pioneer-targets/linux-x64` and `linux-arm64`:
 
 ```sh
 bun run assemble:pioneer
 python3 scripts/pioneer/verify-package.py
 ```
 
-Pushes to `main` and manual dispatch produce `pioneer-terminal-VERSION.tar.gz`
-and its SHA-256 file in the `pioneer-terminal` Actions artifact (30-day retention).
-Numeric version tags additionally publish both files permanently in GitHub
-Releases, after both builds, assembly and artifact verification succeed. Tags
-have no `v` prefix. Use `0.10` for package version `0.10.0`; full `x.y.z` tags are
-also supported. Existing published releases are never overwritten.
-
-Download the archive from Releases and extract it to obtain the directory above.
-Do not select GitHub's automatically generated source-code archives; they are
-source checkouts, not the application package.
-
-Do not change source, manifest, lockfile or icons between builds and assembly.
-Failed builds discard their successful build receipt. Packaging and verification
-never start the application or run unit/browser tests.
-
-## Installation and launch
-
-Gateway selects one Linux guest architecture from `runtime.artifacts`, validates
-it, and extracts its `runtime/` directory into the installation. It supplies the
-managed `node` runtime, working directory and environment, then runs:
+For a local installation check, build only the Linux guest architecture used by
+the development Gateway. Use the same Linux Node 26 builder and build/package
+commands on an isolated source copy, then assemble that target explicitly:
 
 ```sh
-node start.cjs
+node scripts/pioneer/assemble.mjs --target linux-arm64 --output /path/to/local/terminal
+python3 scripts/pioneer/verify-package.py /path/to/local/terminal
+tar -czf /path/to/local/pioneer-terminal-local-linux-arm64.tar.gz -C /path/to/local terminal
 ```
 
-No dependency installation, Bun, tsx or compilation is needed at installation or
-startup. Linux guest artifacts are used on supported macOS, Windows and Linux
-Gateway hosts; actual host and virtualization support depends on Microsandbox.
+The resulting manifest contains only the built architecture and its real tree
+checksum. `--target linux-x64` selects amd64 instead. Omitting `--target` retains
+the two-architecture release build. A macOS-native build must not be labelled as
+a Linux payload. Local assembly does not publish or modify a GitHub release.
 
-The production HTTP backend requires Gateway authentication and routing. It does
-not open a guest shell. See [Gateway requirements](gateway-runtime-requirements.md)
-for the host terminal route and remaining integration obligations. New manifest
-fields still require Gateway implementation; this package is not compatible with
-the existing minimal installer until that implementation is complete.
+Pushes to `main` and manual dispatch produce the combined tarball and SHA-256 file
+in the `pioneer-terminal` Actions artifact (30-day retention). Numeric tags without
+`v` also publish both files in GitHub Releases. The `0.1.0` production release uses tag `0.1.0`. Existing published releases
+are immutable; further source changes require a new version/tag.
+Do not change source, manifest, lockfile or icons between build and assembly.
 
-Existing unit/browser tests and `dev-server.ts` remain developer tools. They are
-excluded from application artifacts. Temporary Microsandbox previews and scratch
-finance MCP/Skill files are not part of the application.
+Download the packaged release archive, not GitHub's automatic source archive.
+Gateway's common App installer accepts the packaged archive or extracted App
+folder. Package installation, backend readiness and availability of the `host.pty`
+service are separate states. There is no separate App consent/grant UI; a current
+installed/enabled App execution uses the supported Host API through its backend
+credential. See [the runtime contract](gateway-runtime-requirements.md).
+
+The initial adaptation was source-only. A subsequent local Linux arm64 build on
+November 13, 2026 passed compilation, TypeScript checking and package verification.
+An isolated Microsandbox builder used the existing pinned CI image and Bun 1.4.3;
+the resulting archive was not published. No automated tests, Gateway build, App
+installation or App execution were performed. The commands above also document
+the unchanged two-architecture release path.

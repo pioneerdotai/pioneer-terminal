@@ -1,5 +1,7 @@
 "use client";
 
+import { backendStorage } from "../lib/browser-state";
+
 import {
   useId,
   useRef,
@@ -25,15 +27,13 @@ import {
 function createShortcutStore() {
   type Snapshot = { shortcuts: Shortcuts; saved: boolean };
   let snapshot: Snapshot | null = null;
-  let storage: Storage | null = null;
   const listeners = new Set<() => void>();
   const getSnapshot = (): Snapshot => {
     if (snapshot) return snapshot;
     let shortcuts = DEFAULT_SHORTCUTS,
       saved = true;
     try {
-      storage = localStorage;
-      shortcuts = readShortcuts(storage.getItem(SHORTCUTS_KEY));
+      shortcuts = readShortcuts(backendStorage.getItem(SHORTCUTS_KEY));
     } catch {
       saved = false;
     }
@@ -48,24 +48,14 @@ function createShortcutStore() {
     subscribe(listener: () => void) {
       listeners.add(listener);
       getSnapshot();
-      const changed = (event: StorageEvent) => {
-        if (
-          storage &&
-          event.storageArea === storage &&
-          (event.key === null || event.key === SHORTCUTS_KEY)
-        )
-          publish(readShortcuts(event.newValue), true);
-      };
-      window.addEventListener("storage", changed);
       return () => {
         listeners.delete(listener);
-        window.removeEventListener("storage", changed);
       };
     },
     update(shortcuts: Shortcuts) {
       let saved = true;
       try {
-        localStorage.setItem(SHORTCUTS_KEY, JSON.stringify(shortcuts));
+        backendStorage.setItem(SHORTCUTS_KEY, JSON.stringify(shortcuts));
       } catch {
         saved = false;
       }

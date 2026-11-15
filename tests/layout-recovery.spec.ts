@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { appState, flushState } from "./app-test";
+import { expect, test, type Page } from "./app-test";
 
 async function server(page: Page) {
   const sessions = new Map<
@@ -7,7 +8,7 @@ async function server(page: Page) {
   >();
   const attaches: (string | null)[] = [];
   const closed: string[] = [];
-  await page.routeWebSocket("**/api/terminal", (socket) => {
+  await page.routeWebSocket("**/terminal", (socket) => {
     let token: string;
     let fresh = false;
     socket.onMessage((raw) => {
@@ -174,19 +175,16 @@ for (const damage of ["missing", "malformed", "stale"]) {
     await ready(page, 1);
     await split(page, 1, "right");
     await ready(page, 2);
-    await page.evaluate((damage) => {
-      const key = Object.keys(sessionStorage).find((key) =>
-        key.endsWith(":layout"),
-      )!;
-      if (damage === "missing") sessionStorage.removeItem(key);
-      else if (damage === "malformed") sessionStorage.setItem(key, "invalid");
-      else {
-        const saved = JSON.parse(sessionStorage.getItem(key)!);
-        saved.ids.push("session-3");
-        saved.activeId = "session-3";
-        sessionStorage.setItem(key, JSON.stringify(saved));
-      }
-    }, damage);
+    await flushState(page);
+    const values = appState(page).values;
+    const key = [...values.keys()].find((key) => key.endsWith(":layout"))!;
+    if (damage === "missing") values.delete(key);
+    else if (damage === "malformed") values.set(key, "invalid");
+    else {
+      const saved = JSON.parse(values.get(key)!);
+      saved.ids.push("session-3"); saved.activeId = "session-3";
+      values.set(key, JSON.stringify(saved));
+    }
     await page.reload();
     await expect.poll(() => h.attaches.length).toBe(4);
     expect(h.attaches.slice(2).sort()).toEqual([...h.sessions.keys()].sort());
@@ -198,36 +196,18 @@ for (const damage of ["missing", "malformed", "stale"]) {
   });
 }
 
-test("layout storage failure is visible and leaves live input and terminal replay intact", async ({
-  page,
-}) => {
+test("backend state failure is visible while existing terminals remain usable", async ({ page }) => {
   const h = await server(page);
   await page.goto("/");
   await ready(page, 1);
   await split(page, 1, "right");
   await ready(page, 2);
-  await page.evaluate(() => {
-    const original = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key, value) {
-      if (this === sessionStorage && key.endsWith(":layout"))
-        throw new DOMException("Quota exceeded", "QuotaExceededError");
-      original.call(this, key, value);
-    };
-  });
+  await flushState(page);
+  appState(page).failWrites = true;
   await page.getByRole("button", { name: "/shell-1", exact: true }).click();
-  await expect(
-    page
-      .getByRole("status")
-      .filter({ hasText: "Pane layout could not be saved" }),
-  ).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("could not be saved");
   await page.keyboard.type("still-live");
   await expect.poll(() => [...h.sessions.values()][0].text).toBe("still-live");
-  await page.reload();
-  await expect.poll(() => h.attaches.length).toBe(4);
-  await expect(panel(page, 1)).toContainText("shell 1 output");
-  await expect(
-    page.getByText("This session could not be restored", { exact: false }),
-  ).toHaveCount(0);
 });
 
 test("a damaged terminal record keeps its pane while surviving shells resume", async ({
@@ -239,12 +219,10 @@ test("a damaged terminal record keeps its pane while surviving shells resume", a
   await split(page, 1, "right");
   await ready(page, 2);
   await page.getByRole("button", { name: "/shell-1", exact: true }).click();
-  await page.evaluate(() => {
-    const key = Object.keys(sessionStorage).find((key) =>
-      key.endsWith(":session-2.0"),
-    )!;
-    sessionStorage.setItem(key, "invalid");
-  });
+  await flushState(page);
+  const values = appState(page).values;
+  const key = [...values.keys()].find((key) => key.endsWith(":session-2.0"))!;
+  values.set(key, "invalid");
   await page.reload();
   await expect(page.getByRole("tabpanel")).toHaveCount(2);
   await expect(panel(page, 2)).toContainText(

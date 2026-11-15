@@ -337,18 +337,24 @@ test("unanswered handshakes and socket creation failures stop retrying at the de
   connection.close();
 });
 
-test("unacknowledged input has byte and message limits even when the socket buffer is empty", () => {
+test("unacknowledged input is bounded by serialized bytes even when the socket buffer is empty", () => {
   const small = setup();
   for (let i = 0; i < INPUT_MESSAGES; i++) small.connection.input("");
   small.connection.input("blocked");
-  assert.equal(small.messages().length, INPUT_MESSAGES);
+  const accepted = small.messages().length;
+  const wireBytes = small.socket.sent.reduce(
+    (total, message) => total + Buffer.byteLength(message), 0,
+  );
+  assert.ok(accepted > 0 && accepted <= INPUT_MESSAGES);
+  assert.ok(wireBytes <= INPUT_LIMIT);
+  assert.ok(wireBytes > INPUT_LIMIT - 64, "the byte window must be filled");
   assert.match(small.errors.at(-1)!, /busy/);
-  small.socket.acknowledge(INPUT_MESSAGES - 1);
-  small.socket.acknowledge(INPUT_MESSAGES - 1);
+  small.socket.acknowledge(accepted - 1);
+  small.socket.acknowledge(accepted - 1);
   small.connection.input("available");
   assert.deepEqual(small.messages().at(-1), {
     type: "input",
-    id: INPUT_MESSAGES + 1,
+    id: accepted + 1,
     data: "available",
   });
   small.connection.close();

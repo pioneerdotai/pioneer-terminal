@@ -102,9 +102,9 @@ jobs:
         with:
           pattern: linux-*
           path: dist/pioneer-targets
-      - name: Assemble and checksum both architecture artifacts
+      - name: Assemble ready payload directories and stamp member-tree checksums
         run: node scripts/pioneer/assemble.mjs
-      - name: Verify archive integrity, architecture and size budget
+      - name: Verify payload integrity, architecture and size budget
         run: python3 scripts/pioneer/verify-package.py
       - name: Archive the combined directory with its relative layout
         env:
@@ -163,4 +163,4 @@ jobs:
           gh release upload "$RELEASE_TAG" \
             "pioneer-terminal-${APP_VERSION}.tar.gz" \
             "pioneer-terminal-${APP_VERSION}.tar.gz.sha256" --clobber
-          gh release edit "$RELEASE_TAG" --draft=false
+          gh release edit "$RELEASE_TAG" --draft=false --latest

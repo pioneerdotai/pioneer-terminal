@@ -39,8 +39,18 @@ export async function copyRuntimeDependencies(runtime, reportPath) {
   });
   const selected = new Set(trace.fileList);
   const warnings = [...trace.warnings].map((warning) => warning.message);
-  if (warnings.length) {
-    throw new Error(`Unresolved custom server dependencies:\n${warnings.join("\n")}`);
+  // ws declares these acceleration addons as optional. Node 26 provides the
+  // native masking/UTF-8 primitives; the launcher disables addon fallbacks.
+  const optionalWarnings = warnings.filter((warning) =>
+    [["bufferutil", "buffer-util.js"], ["utf-8-validate", "validation.js"]].some(
+      ([dependency, file]) =>
+        warning.startsWith(`Failed to resolve dependency "${dependency}":\nCannot find module '${dependency}' loaded from `) &&
+        warning.endsWith(`/node_modules/ws/lib/${file}`),
+    ),
+  );
+  const unresolved = warnings.filter((warning) => !optionalWarnings.includes(warning));
+  if (unresolved.length) {
+    throw new Error(`Unresolved custom server dependencies:\n${unresolved.join("\n")}`);
   }
   const copied = [];
   for (const entry of [...selected].sort()) {
@@ -59,7 +69,7 @@ export async function copyRuntimeDependencies(runtime, reportPath) {
   for (const file of await filesUnder(join(runtime, "node_modules"))) {
     const path = relative(runtime, file).split(sep).join("/");
     if (
-      /node_modules\/(?:@next\/swc-|@tailwindcss\/|lightningcss|lucide-react\/|node-pty\/|ws\/|tsx\/|typescript\/|@playwright\/|playwright|eslint\/|prettier\/)/.test(
+      /node_modules\/(?:@next\/swc-|@tailwindcss\/|lightningcss|lucide-react\/|node-pty\/|tsx\/|typescript\/|@playwright\/|playwright|eslint\/|prettier\/)/.test(
         path,
       ) ||
       path.includes("linuxmusl") ||
@@ -79,5 +89,6 @@ export async function copyRuntimeDependencies(runtime, reportPath) {
     // NFT can report optional/foreign-platform imports. Keep its diagnostics
     // visible for source review; never call static tracing runtime validation.
     warnings,
+    optionalAccelerationAddons: optionalWarnings,
   });
 }

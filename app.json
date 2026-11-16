@@ -9,18 +9,18 @@
     "development"
   ],
   "icon": {
-    "light": "./assets/logo.png",
-    "dark": "./assets/logo.png"
+    "light": "./assets/logo-light.png",
+    "dark": "./assets/logo-dark.png"
   },
   "composerIcon": {
-    "light": "./assets/logo.png",
-    "dark": "./assets/logo.png"
+    "light": "./assets/composer-logo-light.png",
+    "dark": "./assets/composer-logo-dark.png"
   },
   "developer": {
     "name": "Pioneer",
     "logo": {
-      "light": "./assets/logo.png",
-      "dark": "./assets/logo.png"
+      "light": "./assets/pioneer.png",
+      "dark": "./assets/pioneer.png"
     },
     "url": "https://getpioneer.dev"
   },

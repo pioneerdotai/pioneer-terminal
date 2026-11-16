@@ -68,6 +68,26 @@ endings, and a target line width of 80 characters.
 Browser tests: `bunx playwright install webkit`, then `bun run build` and
 `bun run test:e2e`. Only WebKit is configured. Results are saved under `test-results/`.
 
+## CI and releases
+
+`Terminal PR` builds the UI and server and runs unit/real-PTY tests and WebKit
+browser tests for pull requests targeting `main`.
+
+`Publish Terminal` runs independently only when a version tag such as `v0.2.0`
+is pushed. It requires that `app.json` and `package.json` both match the tag's
+`X.Y.Z`, builds Linux x64 and arm64 payloads, verifies the assembled package,
+and publishes the archive and checksum in a GitHub Release. It does not run
+the PR test suite or depend on a successful PR workflow. Pushes and merges
+to `main` do not start either workflow. There is no manual release trigger.
+
+To release, update both version files and `packaging/release-notes.md` in the
+source, then tag the desired commit:
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
 Start with the [project code map](docs/code-organization.md) to find the owner of
 an interface, state, transport or backend change. The stable entry points are
 `server.ts` for production and `dev-server.ts` for local PTYs. The project is based on the local shell example. Upstream: https://github.com/vercel-labs/wterm/tree/main/examples/local.

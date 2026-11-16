@@ -1,16 +1,14 @@
-name: Prepare Pioneer application
+name: Publish Terminal
 
 on:
-  workflow_dispatch:
   push:
-    branches: [main]
-    tags: ["[0-9]*"]
+    tags: ['v*']
 
 permissions:
   contents: read
 
 concurrency:
-  group: pioneer-package-${{ github.ref }}
+  group: terminal-release
   cancel-in-progress: false
 
 jobs:
@@ -19,7 +17,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
       - name: Validate package and release versions
@@ -35,10 +33,11 @@ jobs:
           version = app["version"]
           if not re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", version) or package["version"] != version:
               raise SystemExit("App and package versions must match and use x.y.z")
-          if os.environ["GITHUB_REF_TYPE"] == "tag":
-              tag = os.environ["GITHUB_REF_NAME"]
-              if tag not in (version, version.removesuffix(".0")):
-                  raise SystemExit("Release tags must match the version, without a v prefix")
+          tag = os.environ["GITHUB_REF_NAME"]
+          if not re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", tag):
+              raise SystemExit("Release tags must use vX.Y.Z (for example v0.2.0)")
+          if tag != f"v{version}":
+              raise SystemExit("Release tag must match app.json and package.json versions")
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
               output.write(f"version={version}\n")
           PYTHON
@@ -62,14 +61,14 @@ jobs:
     env:
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
       - name: Prepare developer build toolchain
         run: |
           apt-get update
           apt-get install -y --no-install-recommends ca-certificates unzip
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: "1.4.3"
       - name: Install locked developer dependencies
@@ -92,10 +91,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "26"
       - uses: actions/download-artifact@v4
@@ -126,14 +125,13 @@ jobs:
 
   release:
     name: Publish application release
-    if: github.ref_type == 'tag'
     needs: [preflight, assemble]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
       - uses: actions/download-artifact@v4

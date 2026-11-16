@@ -1,6 +1,6 @@
 {
   "name": "Terminal",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "slug": "terminal",
   "license": "MIT",
   "shortDescription": "Host terminal sessions through Pioneer Gateway.",

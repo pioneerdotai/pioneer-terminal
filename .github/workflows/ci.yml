@@ -1,0 +1,37 @@
+name: Terminal PR
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '26'
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.4.3'
+      - run: bun install --frozen-lockfile --ignore-scripts
+      # Linux has no node-pty prebuild; real-PTY tests need its native helper.
+      # Rebuild only this development dependency, not every install script.
+      - name: Build local PTY test dependency
+        run: npm rebuild node-pty --foreground-scripts
+      - run: bun run build
+      - run: bun run build:server
+      - run: bun run test
+      - name: Install WebKit and system dependencies
+        run: bunx playwright install --with-deps webkit
+      - name: Run WebKit browser tests
+        run: xvfb-run --auto-servernum bun run test:e2e

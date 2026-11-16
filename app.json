@@ -3,8 +3,8 @@
   "version": "0.2.0",
   "slug": "terminal",
   "license": "MIT",
-  "shortDescription": "Host terminal sessions through Pioneer Gateway.",
-  "longDescription": "A web terminal with tabs, split panes and reconnectable shell sessions on the Gateway host. Its interface runs in the managed application environment; Gateway provides authorized host PTYs. Desktop and mobile clients display the interface through their WebView.",
+  "shortDescription": "A terminal with tabs, split panes, and searchable output.",
+  "longDescription": "Run your usual shell and command-line tools in Pioneer. Open separate tabs for different projects, or split the terminal horizontally or vertically to see several sessions at once. Keep a server running in one pane while you work in another. Search through output when you need to find an error or check an earlier result.",
   "categories": [
     "development"
   ],

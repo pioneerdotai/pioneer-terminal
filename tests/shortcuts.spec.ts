@@ -6,7 +6,7 @@ import {
   DEFAULT_SHORTCUTS,
   SHORTCUTS_KEY,
   type Shortcuts,
-} from "../lib/shortcuts";
+} from "../features/terminal/settings/shortcuts";
 
 const custom: Shortcuts = {
   ...DEFAULT_SHORTCUTS,
@@ -74,6 +74,63 @@ async function closeSettings(page: Page) {
 async function seed(page: Page, shortcuts = custom) {
   appState(page).values.set(SHORTCUTS_KEY, JSON.stringify(shortcuts));
 }
+
+test("native arrow text does not precede navigation, while explicit control keys and paste survive", async ({
+  page,
+}) => {
+  const h = await open(page, "/");
+  let expected = "";
+  for (const sample of [
+    { key: "ArrowUp", control: "\x1e", sequence: "\x1b[A", cancelable: true },
+    { key: "ArrowDown", control: "\x1f", sequence: "\x1b[B", cancelable: false },
+  ]) {
+    await input(page, 1).evaluate((element, sample) => {
+      const textarea = element as HTMLTextAreaElement;
+      // Reproduce the observed WebView order: native control-text insertion
+      // before the ordinary keydown. A noncancelable insertion needs input
+      // cleanup; the browser performs a cancelable insertion only if allowed.
+      const allowed = textarea.dispatchEvent(new InputEvent("beforeinput", {
+        bubbles: true,
+        cancelable: sample.cancelable,
+        inputType: "insertText",
+        data: sample.control,
+      }));
+      if (allowed) {
+        textarea.value = sample.control;
+        textarea.dispatchEvent(new InputEvent("input", {
+          bubbles: true,
+          inputType: "insertText",
+          data: sample.control,
+        }));
+      }
+    }, sample);
+    await page.keyboard.press(sample.key);
+    expected += sample.sequence;
+    await expect.poll(() => h.inputs[0].join("")).toBe(expected);
+    await expect(input(page, 1)).toHaveValue("");
+  }
+
+  // The same byte remains valid when explicitly encoded from a Ctrl key.
+  await page.keyboard.press("Control+6");
+  expected += "\x1e";
+  await expect.poll(() => h.inputs[0].join("")).toBe(expected);
+
+  await input(page, 1).evaluate((element) => {
+    const clipboardData = new DataTransfer();
+    clipboardData.setData("text/plain", "\x1e");
+    element.dispatchEvent(new ClipboardEvent("paste", {
+      bubbles: true,
+      cancelable: true,
+      clipboardData,
+    }));
+  });
+  expected += "\x1e";
+  await expect.poll(() => h.inputs[0].join("")).toBe(expected);
+
+  await page.keyboard.insertText("Привет");
+  expected += "Привет";
+  await expect.poll(() => h.inputs[0].join("")).toBe(expected);
+});
 
 test(`saved shortcuts operate sessions and panes without sending commands or repeating actions`, async ({
   page,

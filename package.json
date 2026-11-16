@@ -21,7 +21,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@pioneercompany/app-sdk": "^0.1.0",
+    "@pioneercompany/app-sdk": "^0.2.0",
     "@tailwindcss/postcss": "^4.3.5",
     "@wterm/core": "0.5.10",
     "@wterm/dom": "0.5.10",

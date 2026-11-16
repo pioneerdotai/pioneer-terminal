@@ -68,8 +68,9 @@ endings, and a target line width of 80 characters.
 Browser tests: `bunx playwright install chromium`, then `bun run build` and
 `bun run test:e2e --project=chromium`. Results are saved under `test-results/`.
 
-Start editing `app/` for the interface, `lib/` for session behavior, and
-`server.ts` for production HTTP serving and `dev-server.ts` for local PTYs. The project is based on the local shell example. Upstream: https://github.com/vercel-labs/wterm/tree/main/examples/local.
+Start with the [project code map](docs/code-organization.md) to find the owner of
+an interface, state, transport or backend change. The stable entry points are
+`server.ts` for production and `dev-server.ts` for local PTYs. The project is based on the local shell example. Upstream: https://github.com/vercel-labs/wterm/tree/main/examples/local.
 
 ## How It Works
 
@@ -77,7 +78,7 @@ Start editing `app/` for the interface, `lib/` for session behavior, and
 - Local `dev-server.ts` supplies the PTY/session service for development; the following session behavior describes that protocol.
 - A new production terminal requests `/bin/sh -l` on the Gateway host after its initial dimensions arrive. Local development uses the development host shell.
 - A brief connection interruption resumes that same shell and existing browser terminal; missing output is replayed without repeating parsed bytes
-- Reloading restores split layouts, divider positions, zoom, and the focused terminal, and resumes saved shells while complete recovery records and server sessions remain available
+- Closing or reloading starts a clean workspace with a new shell; output and session identities are never saved
 - The browser sends sequenced JSON input, resize, and byte acknowledgment messages over WebSocket; the server acknowledges input handed to the PTY, relays raw PTY bytes in binary frames, and sends working-directory updates as JSON
 - Terminal resizing, including browser pixel dimensions, is forwarded to the PTY via resize messages
 - The server restores PTY pixel dimensions after each resize so Kitty clients such as `kitten icat` can detect image support
@@ -88,7 +89,7 @@ Start editing `app/` for the interface, `lib/` for session behavior, and
 - An application clipboard-write request shows **Review clipboard request** and **Dismiss** without taking focus. Review opens a fixed, read-only preview; **Copy** (or **Clear clipboard** for empty text) writes only after you click it. New requests do not change an open preview. If the browser denies access, use native Copy from the text field. Clipboard reads are unsupported. Each session retains only its latest pending request, up to 65,536 UTF-8 bytes.
 - The Ghostty core limits rendered Kitty images to 640×480 CSS pixels
 - Auto-sized Kitty images align with the terminal content origin and reserve their rendered height visually so the following shell prompt appears below the image
-- Each session displays its directory in the tab bar. OSC 7 shell reports show the reported host and decoded path, including remote or nested shells. Without a report, the tab bar uses the local shell process's directory, abbreviating home as `~`.
+- Each session displays its directory in the tab bar. OSC 7 shell reports show the decoded path without the host prefix, including remote or nested shells. Without a report, the tab bar uses the local shell process's directory, abbreviating home as `~`.
 - Select terminal text and use the browser's normal Copy action. Wrapped commands copy without added newlines; explicit line breaks, whole Unicode cells, and block glyphs are preserved. Trailing padding is trimmed at fully selected hard row ends. Hold Shift to select when a terminal application has enabled mouse tracking.
 - Native selections also follow output scrolling and pane resizing while their text remains intact. Overwrites, discarded edges, resets, and screen switches clear the selection. Preservation covers up to 1,000 rows and 1,048,576 UTF-16 units; selecting while an older frame is still displayed keeps ordinary browser behavior.
 - Double-click words or paths and triple-click logical lines. Selection crosses confirmed soft wraps, including unmounted history. Hold Shift for live text when an application has enabled mouse reporting. Selection expands up to 1,000 rows and 1,048,576 UTF-16 units; oversized or pending frames keep browser behavior.
@@ -99,27 +100,23 @@ Start editing `app/` for the interface, `lib/` for session behavior, and
 
 ## Key Files
 
-| File                           | Description                                                                        |
-| ------------------------------ | ---------------------------------------------------------------------------------- |
-| `server.ts`                    | Production HTTP server; no shell processes                                          |
-| `lib/pty-output.ts`            | Bounded output window and PTY pause/resume                                         |
-| `lib/pty-output-queue.mts`     | Bounded byte queue and small-read batching shared with the PTY input harness       |
-| `lib/terminal-sessions.ts`     | App-owned session relay: attachment IDs, replay, acknowledgement and expiry                           |
-| `lib/session-recovery.ts`      | Bounded execution-scoped output, resize, and theme replay records                        |
-| `lib/terminal-connection.ts`   | Browser parsing tasks, acknowledgments, and bounded input                          |
-| `lib/terminal-protocol.ts`     | Shared message types and buffer limits                                             |
-| `app/page.tsx`                 | Single application entry point at `/`                                              |
-| `app/session-workspace.tsx`    | Top tabs and actions, split panes, Find controls, and terminal/WebSocket lifecycle |
-| `app/appearance-settings.tsx`  | Appearance dialog, Gateway theme and backend persistence                             |
-| `lib/appearance.ts`            | Validated preferences and terminal colors                                          |
-| `app/shortcut-settings.tsx`    | Shortcut editor and backend persistence                        |
-| `lib/shortcuts.ts`             | Command defaults, binding validation, matching, and labels                         |
-| `app/pane-divider.tsx`         | Pointer and keyboard pane resizing                                                 |
-| `lib/workspace-layout.ts`      | Session selection, split geometry, and directional focus                           |
-| `lib/workspace-persistence.ts` | Bounded layout decoding, session-reference checks, and saved arrangement format    |
-| `app/clipboard-request.tsx`    | Application clipboard request review and explicit Copy                             |
-| `app/output-reader.tsx`        | Read-only output snapshots, refresh, cancellation, and dialog focus                |
-| `app/layout.tsx`               | Root layout with metadata                                                          |
+The [project code map](docs/code-organization.md) covers the complete application.
+The [UI map](features/terminal/README.md) identifies individual controls and views.
+
+| Location | Responsibility |
+| --- | --- |
+| `app/` | Next.js routing, root layout and global styles |
+| `features/terminal/workspace/` | Workspace views, session reducer, layout tree and geometry |
+| `features/terminal/session/` | Terminal views, parser lifecycle, search, clipboard and live transport |
+| `features/terminal/settings/` | Appearance and shortcut models, preference hooks and dialogs |
+| `client/` | Browser SDK connection, host theme, state mirror and HTTP state transport |
+| `shared/terminal-protocol.ts` | Browser/backend messages and common limits |
+| `server/start.ts` | Production server composition |
+| `server/auth.ts`, `server/routes.ts`, `server/lifecycle.ts` | Request identity, routing and process shutdown |
+| `server/state/` | HTTP state contract, validation and serialized file storage |
+| `server/terminal/` | Session registry, individual PTYs, output queues and provider adapters |
+| `scripts/pioneer/` | Build/package commands and their metadata, runtime and integrity helpers |
+
 
 ## Split panes
 
@@ -142,21 +139,17 @@ keeping its previous shell open. **Zoom pane** temporarily shows one pane;
 **Restore panes** brings back the split layout and divider positions. Close a
 session using its tab bar close button; its neighbor fills the freed space,
 and other shells keep running. Layout changes preserve terminal instances,
-history, Find queries, and connections. Reloading restores nested splits,
-divider proportions, the focused terminal, and zoom, including the arrangement
-behind a zoomed pane. Hidden sessions remain in the tab bar. Smaller windows
-keep the same arrangement with minimum pane sizes and workspace scrolling.
-Find queries are not restored.
-
-Layout is saved through the App backend in `APP_DATA`, scoped to the current
-backend execution. Opaque WebViews do not require browser storage.
+scrollback, Find queries, and connections while the app remains open. Hidden
+sessions remain in the tab bar. Smaller windows keep the arrangement with
+minimum pane sizes and workspace scrolling. Closing or reloading discards the
+arrangement and all session output; the next view starts with one new shell.
+No session identities, layout, output, images, or parser state are written to disk.
 
 ## Shell command indicators
 
 A shell emitting OSC 7 `file://host/absolute/path` reports also
 updates its tab bar directory, including while hidden or in a full-screen
-application. A nonempty host is always displayed as `host:/path`; the tooltip
-identifies it as shell-reported metadata. The workspace displays this text
+application. The label and tooltip display the decoded path without its host prefix. The workspace displays this text
 without opening URLs or accessing the reported path. Malformed/non-file URIs,
 credentials, ports, and paths containing control characters are ignored.
 
@@ -164,8 +157,7 @@ The last valid report takes precedence over local process polling until the
 shell sends another report, empty OSC 7, or a terminal reset. Empty reports and
 resets restore the latest process-based directory. Enable OSC 7 in both local
 and remote shell integration to update the label when returning from SSH.
-Reports restore with the session's saved output on reload, within the same
-recovery limits. See [Working directories](https://wterm.dev/configuration#working-directories)
+Reports live only in the open session. See [Working directories](https://wterm.dev/configuration#working-directories)
 for the callback contract and a sample report. No shell configuration is installed.
 
 Shells that emit OSC 133 show **Ready**, **Running**, **Done**, or
@@ -218,26 +210,57 @@ Settings apply immediately, persist across reloads, and synchronize between tabs
 on the same origin. Invalid or conflicting saved settings
 fall back to defaults. If storage is unavailable, changes remain usable for the
 current page and the dialog reports that they could not be saved. These are
-workspace preferences, separate from the session recovery records described below.
+the only workspace preferences saved by the app.
+
+## Application view controls
+
+The tab bar toolbar includes **Move app to bottom**, **Move app to right**,
+**Expand app** and **Close app**, using the SDK view API. They move or close the
+current Pioneer view; pane splits and individual shell-session close buttons
+keep their own scope. Moving retains the mounted terminals and connections.
+Closing stops the live connections and asks Pioneer to close immediately; it
+does not wait for a storage request. Placement failures appear inline without replacing terminal
+output. Pioneer does not add a separate title or toolbar above application content.
 
 ## Appearance
 
-Open **Appearance** in the Terminal actions (⋯) menu to choose **System**, **Dark**,
-or **Light**, and a terminal font size from 10 to 32 px. Changes apply to existing,
-hidden, and new panes without restarting shells or clearing output. Font changes
-resize the terminal grid and report its new dimensions to the PTY. **System**
-follows Gateway appearance (OS appearance in standalone development); **Reset defaults** restores System and 14 px.
-Closing the dialog or pressing Escape returns focus to its opener.
+Terminal always follows the palette delivered by Pioneer through the SDK. The
+same background, foreground, border, muted text and accent apply to the workspace,
+terminal defaults, tabs, menus, dialogs, search and selection. Hover states are
+mixed from those colors. The tab indicator uses `theme.colors.success` when connected, `theme.colors.warning` while loading or
+connecting/reconnecting, and `theme.colors.muted_foreground` after the session ends. There is no
+separate Dark/Light preference; older stored
+choices are ignored. Without a host palette, standalone development follows the
+OS with a fallback palette defined in `features/terminal/theme.ts`.
+Managed views use the exact host background from document creation. Desktop
+seeds CSS variables through an adopted stylesheet, without changing React's
+server markup. Terminal waits for the complete SDK theme before mounting tabs
+and panes; its standalone fallback palette is never shown inside Pioneer.
+The terminal engine's initial CSS background also uses the host background,
+so loading, parser initialization and the first live frame share one surface.
 
-Appearance is saved through the App backend. Invalid saved values fall back to
-defaults. If persistence fails, live changes still work and a warning reports
-that recent state may be lost. Only theme and font size are
-stored; terminal output, session credentials, and layout are not preferences.
-Reloading restores sessions within the recovery limits described below.
+Open **Appearance** in the Terminal actions (⋯) menu to choose a font size from
+10 to 32 px. Changes apply to existing, hidden and new panes without restarting
+shells or clearing output. Font changes resize the grid and report its dimensions
+to the PTY. **Reset defaults** restores 14 px. Closing the dialog or pressing
+Escape returns focus to its opener. Font size is saved through the App backend;
+invalid values fall back to defaults, and persistence failures leave live changes
+usable with a warning.
 
-Ghostty uses `WTerm.setThemeColors()` to update engine defaults and CSS together.
-Theme changes do not inject bytes into the output stream or reset application
-color overrides. Existing indexed-color output is repainted, including history.
+SDK 0.2 delivers the complete native theme rather than a selected palette:
+`mode`, resolved `colors`, `light_theme`, `dark_theme`, fonts, radii, tokens and
+highlighting. `client/host-theme.ts` retains it without projection.
+`features/terminal/theme.ts` maps current `theme.colors` to the UI and parser.
+Menus use `popover`, tabs use `tab_bar`, hover/selection/scrollbars use their
+native roles, and the cursor uses `caret`. UI and terminal font families follow
+the host. Font size remains an explicit Terminal preference.
+
+Ghostty uses `WTerm.setThemeColors()` to update parser defaults and CSS together.
+Its 16 ANSI entries use the theme's base red/green/yellow/blue/magenta/cyan family
+and light variants, plus its background/foreground/muted neutrals. There is no
+separate hardcoded ANSI palette when hosted. Explicit OSC command overrides are
+still terminal output. Theme updates preserve live parser state, retained output,
+terminal instances and connections; none of that state is persisted.
 
 ## Output flow control
 
@@ -307,27 +330,17 @@ Closing a connected session terminates its PTY and cancels pending work.
 Closing while disconnected cancels
 browser retries, and the server expires the detached PTY within five minutes.
 
-Reload recovery stores output bytes, sizes, themes, opaque App attachment IDs
-and input counters through the backend's `/state` route. Host API credentials
-never leave the backend. Stored output may contain sensitive command text.
-Closing a terminal removes its records. The App workspace is shared across its
-views, and backend execution changes clear stale recovery records.
+Closing the App or reloading the page explicitly closes its active connections.
+Each new view starts a clean workspace and new PTYs. Output scrollback exists
+only in memory while that view is open. No output, parser state, layout, attachment
+IDs or input counters are sent to `/state`. This does not change shell-managed
+command history such as `~/.zsh_history`.
 
-A new terminal replays the complete saved prefix from its initial dimensions,
-preserving modes, both screens, history, graphics, and unfinished parser input.
-Historical terminal replies and clipboard requests are not sent again. The
-connection then resumes the same PTY from the saved byte offset, with existing
-input acknowledgment and deduplication behavior. Output is recorded in the browser mirror before acknowledgment and batched to
-backend storage. Abrupt termination can lose an uncommitted batch; incomplete
-replay then fails explicitly. Input text is never retried.
-
-Records are limited to 1 MiB of output and 4,096 events per session, and the backend has a 16 MiB aggregate state bound. Reaching a limit or a storage failure disables refresh
-recovery for that session and shows a status while the live terminal continues.
-Incomplete or invalid records, expired sessions, unavailable output ranges, and
-server restarts produce an explicit failure instead of starting a replacement
-shell. Reload must reattach within the existing five-minute server grace period.
-This is bounded replay from session start, not an unlimited terminal checkpoint
-or PTY survival across server restarts.
+Only font size and keyboard shortcuts are stored in `APP_DATA`. On startup the
+backend removes older recovery records from all users and atomically rewrites
+the state file, freeing their disk storage. Older browser-local recovery keys
+are also removed when browser storage is accessible. Preference writes reject
+session/output keys, and record cleanup does not require a preference change.
 
 This browser protocol belongs to Terminal; Host API has its own typed JSON-RPC contract. Its client and server must be
 updated together; a bare `WebSocketTransport` client cannot connect directly.

@@ -1,4 +1,4 @@
-import { openOutput } from "./terminal-controls";
+import { openOutput, chooseTerminalAction } from "./terminal-controls";
 import { expect, test, type Page, type WebSocketRoute } from "./app-test";
 import { acceptTerminal } from "./terminal-route";
 import { delayWasmInstantiation } from "./wasm-loading";
@@ -64,10 +64,10 @@ test(`nested splits paint concurrently and direct input only to the focused shel
   h.send(1, "first shell");
   await expect(h.panel(1)).toContainText("first shell");
   await h.input(1).focus();
-  await page.getByRole("button", { name: "Split right", exact: true }).click();
+  await chooseTerminalAction(page, "Split right");
   await h.ready(2);
   await h.input(2).focus();
-  await page.getByRole("button", { name: "Split down", exact: true }).click();
+  await chooseTerminalAction(page, "Split down");
   await h.ready(3);
   for (let i = 1; i <= 3; i++) h.send(i, `\r\x1b[2Kvisible stream ${i}`);
   for (let i = 1; i <= 3; i++)
@@ -108,7 +108,7 @@ test(`selecting, zooming, and closing panes retains other shell instances`, asyn
 }) => {
   const h = await workspace(page, "/");
   await h.input(1).focus();
-  await page.getByRole("button", { name: "Split right", exact: true }).click();
+  await chooseTerminalAction(page, "Split right");
   await h.ready(2);
   await page
     .getByRole("button", { name: "New terminal session", exact: true })
@@ -123,14 +123,12 @@ test(`selecting, zooming, and closing panes retains other shell instances`, asyn
   await expect(h.panel(1)).toBeVisible();
   await expect(h.panel(3)).toHaveCount(0);
   await h.input(1).focus();
-  await page.getByRole("button", { name: "Zoom pane", exact: true }).click();
+  await chooseTerminalAction(page, "Zoom pane");
   await expect(h.input(1)).toBeFocused();
   await expect(page.getByRole("tabpanel")).toHaveCount(1);
   expect(h.closed).toEqual([]);
   await h.input(1).focus();
-  await page
-    .getByRole("button", { name: "Restore panes", exact: true })
-    .click();
+  await chooseTerminalAction(page, "Restore panes");
   await expect(h.panel(2)).toBeVisible();
   await expect(h.input(1)).toBeFocused();
   await page
@@ -187,7 +185,7 @@ test(`pointer and keyboard dividers resize live PTYs within pane bounds`, async 
 }) => {
   const h = await workspace(page, "/");
   await h.input(1).focus();
-  await page.getByRole("button", { name: "Split right", exact: true }).click();
+  await chooseTerminalAction(page, "Split right");
   await h.ready(2);
   await expect
     .poll(() => h.sizes[0].at(-1)!.cols)
@@ -234,7 +232,7 @@ test(`pointer and keyboard dividers resize live PTYs within pane bounds`, async 
     })
     .toBeLessThanOrEqual(800);
   await h.input(1).focus();
-  await page.getByRole("button", { name: "Split down", exact: true }).click();
+  await chooseTerminalAction(page, "Split down");
   await h.ready(3);
   const vertical = page.getByRole("separator", {
     name: "Resize panes vertically",
@@ -257,7 +255,7 @@ test(`pane activation preserves dialog and Find focus and caps visible splits`, 
 }) => {
   const h = await workspace(page, "/");
   await h.input(1).focus();
-  await page.getByRole("button", { name: "Split right", exact: true }).click();
+  await chooseTerminalAction(page, "Split right");
   await h.ready(2);
   // Activate the other pane by opening its reader; focus must stay in the dialog.
   await h.input(1).focus();
@@ -280,12 +278,13 @@ test(`pane activation preserves dialog and Find focus and caps visible splits`, 
   await page.keyboard.press("Escape");
   await expect(h.input(2)).toBeFocused();
   await h.input(2).focus();
-  await page.getByRole("button", { name: "Split down", exact: true }).click();
+  await chooseTerminalAction(page, "Split down");
   await h.ready(3);
   await h.input(1).focus();
-  await page.getByRole("button", { name: "Split down", exact: true }).click();
+  await chooseTerminalAction(page, "Split down");
   await h.ready(4);
   await expect(page.getByRole("tabpanel")).toHaveCount(4);
+  await page.getByRole("button", { name: "Terminal actions", exact: true }).click();
   for (const button of await page
     .getByRole("button", { name: /^Split (right|down)$/ })
     .all())
@@ -301,9 +300,7 @@ test("a delayed Ghostty pane cannot take focus from the pane selected while it l
   const loading = await delayWasmInstantiation(page);
   try {
     await h.input(1).focus();
-    await page
-      .getByRole("button", { name: "Split right", exact: true })
-      .click();
+    await chooseTerminalAction(page, "Split right");
     await loading.waitUntilStarted();
     expect(h.sockets).toHaveLength(1);
     await h.input(1).focus();

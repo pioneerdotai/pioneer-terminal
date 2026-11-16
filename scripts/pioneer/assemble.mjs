@@ -1,7 +1,8 @@
 import { chmod, cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
-import { json, option, root, run, treeDigest, writeJson } from "./common.mjs";
-import { copyMetadata, metadata, sha256 } from "./package.mjs";
+import { json, option, root, run, writeJson } from "./common.mjs";
+import { copyMetadata, metadata } from "./metadata.mjs";
+import { fileIndex, sha256, treeDigest } from "./files.mjs";
 
 const input = resolve(option("--input") ?? join(root, "dist/pioneer-targets"));
 const info = await metadata();
@@ -97,7 +98,6 @@ await writeJson(join(output, "build-info.json"), {
   sourceCommit: process.env.GITHUB_SHA ?? null,
   artifacts,
 });
-const { fileIndex } = await import("./common.mjs");
 const sums = (await fileIndex(output))
   .map((file) => `${file.sha256}  ${file.path}`)
   .join("\n");

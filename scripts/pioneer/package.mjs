@@ -1,76 +1,9 @@
-import { createReadStream } from "node:fs";
-import { createHash } from "node:crypto";
-import {
-  cp,
-  lstat,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  realpath,
-  rename,
-  rm,
-} from "node:fs/promises";
-import { join, relative, sep } from "node:path";
-import { copyRuntimeDependencies } from "./trace-runtime.mjs";
-import {
-  fileIndex,
-  json,
-  nativeTarget,
-  packagePath,
-  root,
-  run,
-  writeJson,
-} from "./common.mjs";
-
-export async function sha256(path) {
-  const hash = createHash("sha256");
-  for await (const chunk of createReadStream(path)) hash.update(chunk);
-  return hash.digest("hex");
-}
-
-// Used by assemble.mjs too; importing it must not start a build.
-export async function metadata() {
-  const app = await json(join(root, "app.json"));
-  const pkg = await json(join(root, "package.json"));
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(app.slug) || app.slug.length > 64) {
-    throw new Error("Invalid app slug");
-  }
-  if (app.version !== pkg.version || !/^\d+\.\d+\.\d+$/.test(app.version)) {
-    throw new Error(
-      "This developer packager requires matching x.y.z app/package versions",
-    );
-  }
-  if (app.skills || app.mcp || app.locales) {
-    throw new Error(
-      "Terminal packaging currently has no Skill/MCP/locale payload; declare these only after adding their packaging",
-    );
-  }
-  const assets = new Set();
-  for (const icon of [app.icon, app.composerIcon, app.developer?.logo].filter(
-    Boolean,
-  )) {
-    for (const theme of ["light", "dark"]) {
-      const path = await packagePath(root, icon[theme]);
-      if (!(await lstat(path)).isFile())
-        throw new Error(`Expected icon file: ${path}`);
-      assets.add(relative(root, path));
-    }
-  }
-  if (!app.icon?.light || !app.icon?.dark)
-    throw new Error("Both icon themes are required");
-  return { app, pkg, assets: [...assets] };
-}
-
-export async function copyMetadata(destination, info) {
-  await mkdir(destination, { recursive: true });
-  await cp(join(root, "app.json"), join(destination, "app.json"));
-  for (const asset of info.assets) {
-    const { dirname } = await import("node:path");
-    await mkdir(dirname(join(destination, asset)), { recursive: true });
-    await cp(join(root, asset), join(destination, asset));
-  }
-}
+import { cp, mkdir, mkdtemp, readFile, rename, rm } from "node:fs/promises";
+import { join, sep } from "node:path";
+import { json, nativeTarget, root, run, writeJson } from "./common.mjs";
+import { fileIndex, sha256 } from "./files.mjs";
+import { metadata } from "./metadata.mjs";
+import { createRuntimePayload } from "./runtime-payload.mjs";
 
 async function main() {
   if (
@@ -103,51 +36,7 @@ async function main() {
   const temporary = await mkdtemp(join(root, ".pioneer-stage-"));
   const output = join(root, "dist/pioneer-targets", target);
   try {
-    const runtime = join(temporary, "payload/runtime");
-    await mkdir(runtime, { recursive: true });
-    await copyRuntimeDependencies(
-      runtime,
-      join(temporary, "dependency-trace.json"),
-    );
-    for (const entry of await readdir(join(root, ".next"))) {
-      await mkdir(join(runtime, ".next"), { recursive: true });
-      if (
-        [
-          "standalone",
-          "cache",
-          "dev",
-          "diagnostics",
-          "types",
-          "trace",
-          "trace-build",
-        ].includes(entry)
-      )
-        continue;
-      await cp(join(root, ".next", entry), join(runtime, ".next", entry), {
-        recursive: true,
-      });
-    }
-    await cp(join(root, "public"), join(runtime, "public"), {
-      recursive: true,
-    });
-    await cp(join(root, "next.config.mjs"), join(runtime, "next.config.mjs"));
-    await cp(join(root, "build/server.cjs"), join(runtime, "server.cjs"));
-    await writeJson(join(runtime, "runtime-target.json"), {
-      platform: process.platform,
-      arch: process.arch,
-      nodeModulesABI: process.versions.modules,
-      nodeMajor: 26,
-    });
-    await writeJson(join(runtime, "package.json"), {
-      name: info.pkg.name,
-      version: info.pkg.version,
-      private: true,
-      dependencies: {
-        next: info.pkg.dependencies.next,
-        ws: info.pkg.dependencies.ws,
-        "@pioneercompany/app-sdk": info.pkg.dependencies["@pioneercompany/app-sdk"],
-      },
-    });
+    await createRuntimePayload(temporary, info);
     const release = join(temporary, "release");
     await mkdir(release);
     await cp(
@@ -220,10 +109,4 @@ async function main() {
   }
 }
 
-if (
-  process.argv[1] &&
-  (await realpath(process.argv[1])) ===
-    (await realpath(new URL(import.meta.url)))
-) {
-  await main();
-}
+await main();

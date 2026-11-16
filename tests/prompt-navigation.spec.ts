@@ -1,3 +1,4 @@
+import { chooseTerminalAction } from "./terminal-controls";
 import { appState } from "./app-test";
 import { expect, test, type Page, type WebSocketRoute } from "./app-test";
 import { acceptTerminal, terminalReady } from "./terminal-route";
@@ -91,9 +92,9 @@ test("prompt controls and configured shortcuts navigate the focused session with
   );
   await previous.click();
   await expect.poll(() => topText(page, 1)).toContain("shell1-third>");
-  await previous.click();
+  await chooseTerminalAction(page, "Previous prompt");
   await expect.poll(() => topText(page, 1)).toContain("shell1-second>");
-  await page.getByRole("button", { name: "Next prompt", exact: true }).click();
+  await chooseTerminalAction(page, "Next prompt");
   await expect.poll(() => topText(page, 1)).toContain("shell1-third>");
   await page
     .getByRole("button", { name: "New terminal session", exact: true })

@@ -4,7 +4,7 @@ import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 import { WebSocket, WebSocketServer } from "ws";
 import * as pty from "node-pty";
-import { TerminalSessions } from "../lib/terminal-sessions";
+import { TerminalSessions } from "../server/terminal/sessions";
 
 test(
   "real PTY and socket recovery preserves bytes and the same live process",

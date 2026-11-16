@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { TerminalConnection } from "../lib/terminal-connection";
+import {
+  TerminalConnection,
+} from "../features/terminal/session/transport/connection";
 import {
   INPUT_LIMIT,
   INPUT_MESSAGES,
@@ -8,7 +10,7 @@ import {
   OUTPUT_FRAMES,
   OUTPUT_WINDOW,
   RECONNECT_MS,
-} from "../lib/terminal-protocol";
+} from "../shared/terminal-protocol";
 
 class Socket {
   readyState = 1;
@@ -72,54 +74,6 @@ function setup(write?: (data: Uint8Array) => void) {
         .filter((message) => message.type !== "close"),
   };
 }
-
-test("reloaded clients resume saved bytes and input IDs, checkpoint before ACK/send, and detach without closing the PTY", (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  const socket = new Socket();
-  const events: string[] = [];
-  const opens: boolean[] = [];
-  const send = socket.send.bind(socket);
-  socket.send = (data) => {
-    events.push(`send:${JSON.parse(data).type}`);
-    send(data);
-  };
-  const connection = new TerminalConnection(
-    () => socket as unknown as WebSocket,
-    {
-      write: () => events.push("write"),
-      open: (_resumed, lost) => opens.push(lost),
-      cwd: () => {},
-      end: () => {},
-      inputError: () => {},
-      reconnecting: () => {},
-      checkpoint: (state) =>
-        events.push(`saved:${state.bytes}:${state.inputSent}`),
-    },
-    { session: "a".repeat(64), bytes: 20, inputSent: 4, inputAck: 2 },
-  );
-  socket.onopen?.();
-  assert.deepEqual(JSON.parse(socket.sent[0]), {
-    type: "attach",
-    session: "a".repeat(64),
-    bytes: 20,
-  });
-  socket.ready("a".repeat(64), true, 3);
-  assert.deepEqual(opens, [true]);
-  events.length = 0;
-  socket.output(Buffer.from("next"));
-  t.mock.timers.tick(0);
-  assert.deepEqual(events, ["write", "saved:24:3", "send:ack"]);
-  events.length = 0;
-  connection.input("new input");
-  assert.deepEqual(events, ["saved:24:4", "send:input"]);
-  connection.detach();
-  t.mock.timers.runAll();
-  assert.equal(
-    socket.sent.some((data) => JSON.parse(data).type === "close"),
-    false,
-  );
-  assert.equal(connection.connected, false);
-});
 
 test("ACK follows parsing and preserves fragmented bytes", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });

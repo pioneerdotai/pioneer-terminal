@@ -7,7 +7,7 @@ import {
   eventBinding,
   matchCommand,
   readShortcuts,
-} from "../lib/shortcuts";
+} from "../features/terminal/settings/shortcuts";
 
 const event = (options: Partial<KeyboardEvent> = {}) =>
   ({

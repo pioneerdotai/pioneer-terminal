@@ -6,3 +6,8 @@ export async function openOutput(page: Page) {
     .click();
   await page.getByRole("button", { name: "Read output", exact: true }).click();
 }
+
+export async function chooseTerminalAction(page: Page, name: string) {
+  await page.getByRole("button", { name: "Terminal actions", exact: true }).click();
+  await page.getByRole("button", { name, exact: true }).click();
+}

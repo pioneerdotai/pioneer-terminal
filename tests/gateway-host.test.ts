@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { WebSocketServer } from "ws";
 import { createAppServerContext, PioneerError } from "@pioneercompany/app-sdk/server";
-import { GatewayHost } from "../lib/gateway-host";
+import { GatewayHost } from "../server/terminal/gateway-pty";
 
 async function hostFor(endpoint: string | null, credential = "a".repeat(64)) {
   return new GatewayHost(await createAppServerContext({

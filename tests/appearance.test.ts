@@ -1,8 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_APPEARANCE, readAppearance } from "../lib/appearance";
+import {
+  DEFAULT_APPEARANCE,
+  readAppearance,
+} from "../features/terminal/settings/appearance";
 
-test("stored appearance accepts only supported choices and bounded integer sizes", () => {
+test("stored font size is bounded and legacy theme choices do not override the host", () => {
   for (const value of [
     null,
     "{",
@@ -17,10 +20,9 @@ test("stored appearance accepts only supported choices and bounded integer sizes
     readAppearance(
       '{"theme":"light","fontSize":18,"session":"not-a-preference"}',
     ),
-    { theme: "light", fontSize: 18 },
+    { fontSize: 18 },
   );
   assert.deepEqual(readAppearance('{"theme":"dark","fontSize":14.5}'), {
-    theme: "dark",
     fontSize: 14,
   });
 });

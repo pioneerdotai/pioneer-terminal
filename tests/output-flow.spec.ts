@@ -5,7 +5,7 @@ import {
   INPUT_LIMIT,
   OUTPUT_CHUNK,
   OUTPUT_WINDOW,
-} from "../lib/terminal-protocol";
+} from "../shared/terminal-protocol";
 
 test(`bounded output drains through synchronized drawing and accepts input during a stream`, async ({
   page,

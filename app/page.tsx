@@ -1,5 +1,5 @@
-import { GatewayWorkspace } from "./gateway-workspace";
+import { TerminalApp } from "@/features/terminal/terminal-app";
 
 export default function Terminal() {
-  return <GatewayWorkspace />;
+  return <TerminalApp />;
 }

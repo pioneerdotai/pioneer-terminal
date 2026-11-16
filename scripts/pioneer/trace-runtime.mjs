@@ -2,6 +2,7 @@ import { cp, lstat, mkdir, readFile, realpath } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, relative, sep } from "node:path";
 import { root, writeJson } from "./common.mjs";
+import { filesUnder } from "./files.mjs";
 
 const require = createRequire(join(root, "package.json"));
 // Next is pinned. Reuse the same tracer as this exact Next build, not a second
@@ -65,7 +66,6 @@ export async function copyRuntimeDependencies(runtime, reportPath) {
   }
   // Production packages must not contain compiler/tooling or a second libc's
   // binaries. Fail instead of pruning potentially necessary code silently.
-  const { filesUnder } = await import("./common.mjs");
   for (const file of await filesUnder(join(runtime, "node_modules"))) {
     const path = relative(runtime, file).split(sep).join("/");
     if (

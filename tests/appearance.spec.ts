@@ -1,7 +1,9 @@
+import { chooseTerminalAction } from "./terminal-controls";
 import { appState, flushState } from "./app-test";
 import { expect, test, type Page, type WebSocketRoute } from "./app-test";
+import { makeHostTheme } from "./host-theme";
 import { acceptTerminal } from "./terminal-route";
-import { APPEARANCE_KEY } from "../lib/appearance";
+import { APPEARANCE_KEY } from "../features/terminal/settings/appearance";
 
 async function open(page: Page, path: string) {
   const sockets: WebSocketRoute[] = [];
@@ -35,7 +37,95 @@ async function settings(page: Page) {
   return appearanceDialog(page);
 }
 
-test("Pioneer SDK theme updates preserve the mounted terminal and respect explicit appearance", async ({ page }) => {
+const lightTheme = makeHostTheme("light", {
+  background: "#eeeeee", foreground: "#111111", tab_bar: "#f2f3f4", popover: "#e8eef4",
+  muted_foreground: "#777777", border: "#aaaaaa", primary: "#3366ff", primary_foreground: "#ffffff",
+  ring: "#aabbcc", caret: "#2299dd", red: "#e45649", blue_light: "#99bbff",
+  success: "#22aa66", warning: "#dd8800", danger: "#dd3344", info: "#3399dd",
+});
+const statusIndicator = (page: Page) => page.getByRole("navigation", { name: "Terminal sessions" })
+  .getByRole("button", { pressed: true }).locator('span[aria-hidden="true"]');
+async function hostTheme(page: Page, theme = lightTheme) {
+  await page.evaluate(theme => {
+    window.postMessage({ type: "pioneer.theme", theme }, location.origin);
+  }, theme);
+  await expect(page.locator(".workspace")).toHaveAttribute("data-theme", theme.mode);
+}
+
+for (const surface of [
+  { mode: "light", os: "dark", background: "#fdfaf1", foreground: "#111111", tabBar: "#fcfcf7", rgb: "rgb(253, 250, 241)", tabRgb: "rgb(252, 252, 247)" },
+  { mode: "dark", os: "light", background: "#080b10", foreground: "#eeeeee", tabBar: "#10100d", rgb: "rgb(8, 11, 16)", tabRgb: "rgb(16, 16, 13)" },
+] as const) {
+  test(`${surface.mode} host surface survives SSR, theme delivery and terminal startup`, async ({ page }) => {
+    // Opposite OS appearance and custom colors expose both Canvas and fallback
+    // palette leaks. The host's CSS boot contract precedes application scripts.
+    await page.emulateMedia({ colorScheme: surface.os });
+    await page.addInitScript(({ mode, background, foreground }) => {
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(":root {}");
+      const style = (sheet.cssRules[0] as CSSStyleRule).style;
+      style.setProperty("--pioneer-color-scheme", mode);
+      style.setProperty("--pioneer-background", background);
+      style.setProperty("--pioneer-foreground", foreground);
+      style.setProperty("--pioneer-host-theme", "1");
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+    }, surface);
+    const hydrationErrors: string[] = [];
+    page.on("console", message => {
+      if (/hydration|hydrated/i.test(message.text())) hydrationErrors.push(message.text());
+    });
+    page.on("pageerror", error => hydrationErrors.push(error.message));
+    await page.routeWebSocket("**/terminal", acceptTerminal);
+    let releaseScripts!: () => void;
+    let releaseEngine!: () => void;
+    const scripts = new Promise<void>(resolve => { releaseScripts = resolve; });
+    const engine = new Promise<void>(resolve => { releaseEngine = resolve; });
+    await page.route(/\.js(?:\?|$)/, async route => {
+      await scripts;
+      await route.continue();
+    });
+    await page.route("**/ghostty-vt.wasm", async route => {
+      await engine;
+      await route.continue();
+    });
+    const preferences = page.waitForRequest(request =>
+      request.method() === "GET" && new URL(request.url()).pathname.endsWith("/state"));
+    try {
+      await page.goto("/", { waitUntil: "commit" });
+      const app = page.locator(".terminal-app");
+      await expect(app).toBeVisible();
+      await expect(page.locator("body")).toHaveCSS("background-color", surface.rgb);
+      await expect(app).toHaveCSS("background-color", surface.rgb);
+      await expect(page.getByRole("navigation", { name: "Terminal sessions" })).toHaveCount(0);
+      releaseScripts();
+      await preferences; // Hydration is running, but no host snapshot is available.
+      await expect(app).toHaveCSS("background-color", surface.rgb);
+      await expect(page.getByRole("navigation", { name: "Terminal sessions" })).toHaveCount(0);
+      const theme = makeHostTheme(surface.mode, {
+        background: surface.background, foreground: surface.foreground, tab_bar: surface.tabBar,
+      });
+      await hostTheme(page, theme);
+      await expect(page.locator(".workspace > header")).toHaveCSS("background-color", surface.tabRgb);
+      await expect(page.getByRole("button", { name: "Starting…", exact: true }).first()
+        .locator("..")).toHaveCSS("background-color", surface.rgb);
+      const loading = page.getByText("Loading terminal…", { exact: true });
+      await expect(loading).toBeVisible();
+      await expect(loading).toHaveCSS("background-color", surface.rgb);
+      releaseEngine();
+      await expect(page.getByRole("textbox", { name: "Terminal 1", exact: true })).toBeFocused();
+      await expect(page.locator(".local-terminal")).toHaveCSS("background-color", surface.rgb);
+      await expect(app).toHaveCSS("background-color", surface.rgb);
+      expect(hydrationErrors).toEqual([]);
+    } finally {
+      releaseScripts();
+      releaseEngine();
+    }
+  });
+}
+
+test("Pioneer palette owns the whole UI and parser, including updates within one appearance", async ({ page }) => {
+  // A preference written by an older version cannot override the host palette.
+  appState(page).values.set(APPEARANCE_KEY, '{"theme":"dark","fontSize":18}');
   const hydrationErrors: string[] = [];
   page.on("console", message => {
     if (/hydration|hydrated/i.test(message.text())) hydrationErrors.push(message.text());
@@ -43,29 +133,70 @@ test("Pioneer SDK theme updates preserve the mounted terminal and respect explic
   const h = await open(page, "/");
   h.sockets[0].send(Buffer.from("retained across host theme\r\n"));
   await expect(page.locator(".term-grid")).toContainText("retained across host theme");
-  const htmlStyle = await page.locator("html").getAttribute("style");
   await page.locator(".term-grid").evaluate(element => Object.assign(window, { sdkThemeGrid: element }));
-  const palette = {
-    appearance: "light", background: "#eeeeee", foreground: "#111111",
-    muted: "#777777", border: "#aaaaaa", accent: "#3366ff", "accent-foreground": "#ffffff",
-  };
-  await page.evaluate(palette => window.postMessage({ type: "pioneer.theme", palette }, location.origin), palette);
+  await hostTheme(page);
   await expect(page.locator(".workspace")).toHaveCSS("background-color", "rgb(238, 238, 238)");
-  await expect(page.locator(".local-terminal")).toHaveCSS("background-color", "rgb(250, 250, 250)");
+  await expect(page.locator(".local-terminal")).toHaveCSS("background-color", "rgb(238, 238, 238)");
+  await expect(page.locator(".local-terminal")).toHaveCSS("color", "rgb(17, 17, 17)");
+  await expect(statusIndicator(page)).toHaveCSS("background-color", "rgb(34, 170, 102)");
+  await expect(page.locator(".workspace > header")).toHaveCSS("border-bottom-color", "rgb(170, 170, 170)");
   const dialog = await settings(page);
-  await dialog.getByRole("combobox", { name: "Theme" }).selectOption("dark");
+  await expect(dialog.getByRole("combobox", { name: "Theme" })).toHaveCount(0);
+  await expect(dialog).toHaveCSS("background-color", "rgb(232, 238, 244)");
+  await expect(page.locator(".workspace > header")).toHaveCSS("background-color", "rgb(242, 243, 244)");
+  await expect(page.locator(".local-terminal")).toHaveCSS("font-family", /Fixture Mono/);
+  await expect(dialog.locator("p").first()).toHaveCSS("color", "rgb(119, 119, 119)");
+
+  // Change all the RGB values without changing light/dark mode.
+  await hostTheme(page, {
+    ...lightTheme,
+    colors: {
+      ...lightTheme.colors, background: "rgba(221,238,255,1)", foreground: "#223344",
+      popover: "#d3dde7", tab_bar: "#d9e3ed", muted_foreground: "#556677",
+      border: "#667788", primary: "#445566", caret: "#557799", success: "#42a386",
+    },
+  });
+  await expect(dialog).toHaveCSS("background-color", "rgb(211, 221, 231)");
+  await expect(page.locator(".workspace > header")).toHaveCSS("background-color", "rgb(217, 227, 237)");
+  await expect(page.locator(".local-terminal")).toHaveCSS("background-color", "rgb(221, 238, 255)");
+  await expect(page.locator(".local-terminal")).toHaveCSS("color", "rgb(34, 51, 68)");
+  await expect(statusIndicator(page)).toHaveCSS("background-color", "rgb(66, 163, 134)");
+  await expect(page.locator(".workspace > header")).toHaveCSS("border-bottom-color", "rgb(102, 119, 136)");
   await page.keyboard.press("Escape");
-  await page.evaluate(palette => window.postMessage({ type: "pioneer.theme", palette }, location.origin), palette);
-  await expect(page.locator(".local-terminal")).toHaveCSS("background-color", "rgb(0, 0, 0)");
+  h.sockets[0].send(Buffer.from("\x1b]10;?\x07\x1b]11;?\x07\x1b]12;?\x07"));
+  await expect.poll(() => h.input.join("")).toBe(
+    "\x1b]10;rgb:2222/3333/4444\x07\x1b]11;rgb:dddd/eeee/ffff\x07\x1b]12;rgb:5555/7777/9999\x07",
+  );
   await expect(page.locator(".term-grid")).toContainText("retained across host theme");
   expect(await page.locator(".term-grid").evaluate(element =>
     (window as unknown as { sdkThemeGrid: Element }).sdkThemeGrid === element)).toBe(true);
-  expect(await page.locator("html").getAttribute("style")).toBe(htmlStyle);
   expect(h.sockets).toHaveLength(1);
   expect(hydrationErrors).toEqual([]);
 });
 
-test(`appearance updates existing and new panes, resizes the PTY, and survives reload`, async ({
+test("tab status uses host warning while connecting, success when ready, and muted after closure", async ({ page }) => {
+  const sockets: WebSocketRoute[] = [];
+  const attachments: Promise<void>[] = [];
+  await page.routeWebSocket("**/terminal", socket => {
+    sockets.push(socket);
+    attachments.push(new Promise(resolve => {
+      socket.onMessage(raw => {
+        if (JSON.parse(raw.toString()).type === "attach") resolve();
+      });
+    }));
+  });
+  await page.goto("/");
+  await expect.poll(() => sockets.length).toBe(1);
+  await attachments[0];
+  await hostTheme(page);
+  await expect(statusIndicator(page)).toHaveCSS("background-color", "rgb(221, 136, 0)");
+  sockets[0].send(JSON.stringify({ type: "ready", session: "a".repeat(64), resumed: false, input: 0 }));
+  await expect(statusIndicator(page)).toHaveCSS("background-color", "rgb(34, 170, 102)");
+  sockets[0].close({ code: 1000, reason: "Session ended" });
+  await expect(statusIndicator(page)).toHaveCSS("background-color", "rgb(119, 119, 119)");
+});
+
+test(`font size updates existing and new panes, resizes the PTY, and survives reload`, async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "dark" });
@@ -77,12 +208,11 @@ test(`appearance updates existing and new panes, resizes the PTY, and survives r
     .evaluate((element) => Object.assign(window, { originalGrid: element }));
   const original = h.sizes[0].at(-1)!;
   const dialog = await settings(page);
-  await expect(dialog.getByRole("combobox", { name: "Theme" })).toBeFocused();
-  await dialog.getByRole("combobox", { name: "Theme" }).selectOption("light");
+  await expect(dialog.getByRole("slider", { name: /Font size/ })).toBeFocused();
   await dialog.getByRole("slider", { name: /Font size/ }).fill("20");
   await expect(page.locator(".local-terminal")).toHaveCSS(
     "background-color",
-    "rgb(250, 250, 250)",
+    "rgb(10, 10, 10)",
   );
   await expect(page.locator(".local-terminal")).toHaveCSS("font-size", "20px");
   await expect.poll(() => h.sizes[0].at(-1)!.cols).toBeLessThan(original.cols);
@@ -104,27 +234,27 @@ test(`appearance updates existing and new panes, resizes the PTY, and survives r
   await expect(
     page.getByRole("button", { name: "Terminal actions", exact: true }),
   ).toBeFocused();
-  await page.getByRole("button", { name: "Split right", exact: true }).click();
+  await chooseTerminalAction(page, "Split right");
   await expect(
     page.getByRole("textbox", { name: "Terminal 2", exact: true }),
   ).toBeFocused();
   for (const terminal of await page.locator(".local-terminal").all()) {
-    await expect(terminal).toHaveCSS("background-color", "rgb(250, 250, 250)");
+    await expect(terminal).toHaveCSS("background-color", "rgb(10, 10, 10)");
     await expect(terminal).toHaveCSS("font-size", "20px");
   }
   await flushState(page);
   const stored = JSON.parse(appState(page).values.get(APPEARANCE_KEY)!);
-  expect(stored).toEqual({ theme: "light", fontSize: 20 });
-  // Wait for attachment, not just focus, before testing session recovery.
+  expect(stored).toEqual({ fontSize: 20 });
+  // Both old connections must exist before reloading into a fresh workspace.
   await expect.poll(() => h.sizes[1]?.length ?? 0).toBeGreaterThan(0);
   await page.reload();
   await expect(
-    page.getByRole("textbox", { name: "Terminal 2", exact: true }),
+    page.getByRole("textbox", { name: "Terminal 1", exact: true }),
   ).toBeFocused();
-  await expect(page.locator(".local-terminal")).toHaveCount(2);
+  await expect(page.locator(".local-terminal")).toHaveCount(1);
   for (const terminal of await page.locator(".local-terminal").all()) {
     await expect(terminal).toHaveCSS("font-size", "20px");
-    await expect(terminal).toHaveCSS("background-color", "rgb(250, 250, 250)");
+    await expect(terminal).toHaveCSS("background-color", "rgb(10, 10, 10)");
   }
   await settings(page);
   await appearanceDialog(page)
@@ -132,37 +262,21 @@ test(`appearance updates existing and new panes, resizes the PTY, and survives r
     .click();
   for (const terminal of await page.locator(".local-terminal").all()) {
     await expect(terminal).toHaveCSS("font-size", "14px");
-    await expect(terminal).toHaveCSS("background-color", "rgb(0, 0, 0)");
+    await expect(terminal).toHaveCSS("background-color", "rgb(10, 10, 10)");
   }
 });
 
-test("system appearance follows OS changes while explicit choices stay fixed", async ({
-  page,
-}) => {
+test("standalone fallback follows the OS until a Pioneer palette is supplied", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "light" });
   const h = await open(page, "/");
-  await expect(page.locator(".workspace")).toHaveAttribute(
-    "data-theme",
-    "light",
-  );
-  await expect(page.locator(".local-terminal")).toHaveCSS(
-    "background-color",
-    "rgb(250, 250, 250)",
-  );
+  await expect(page.locator(".local-terminal")).toHaveCSS("background-color", "rgb(255, 255, 255)");
   await page.emulateMedia({ colorScheme: "dark" });
-  await expect(page.locator(".local-terminal")).toHaveCSS(
-    "background-color",
-    "rgb(0, 0, 0)",
-  );
-  const dialog = await settings(page);
-  await dialog.getByRole("combobox", { name: "Theme" }).selectOption("light");
+  await expect(page.locator(".local-terminal")).toHaveCSS("background-color", "rgb(10, 10, 10)");
+  await hostTheme(page);
   await page.emulateMedia({ colorScheme: "light" });
   await page.emulateMedia({ colorScheme: "dark" });
-  await expect(page.locator(".workspace")).toHaveAttribute(
-    "data-theme",
-    "light",
-  );
-  await expect(dialog).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await expect(page.locator(".workspace")).toHaveAttribute("data-theme", "light");
+  await expect(page.locator(".local-terminal")).toHaveCSS("background-color", "rgb(238, 238, 238)");
   expect(h.sockets).toHaveLength(1);
   expect(h.input).toEqual([]);
 });
@@ -188,10 +302,7 @@ test("theme updates repaint retained indexed colors and preserve fragmented inpu
   const first = page.locator(".term-scrollback-row").first();
   await expect(first).toBeVisible();
   await expect(first).toContainText("retained");
-  await settings(page);
-  await appearanceDialog(page)
-    .getByRole("combobox", { name: "Theme" })
-    .selectOption("light");
+  await hostTheme(page);
   await expect(first.locator("span").first()).toHaveCSS(
     "color",
     "rgb(228, 86, 73)",
@@ -203,9 +314,7 @@ test("theme updates repaint retained indexed colors and preserve fragmented inpu
     "background-color",
     "rgb(18, 52, 86)",
   );
-  await appearanceDialog(page)
-    .getByRole("combobox", { name: "Theme" })
-    .selectOption("dark");
+  await hostTheme(page, { ...lightTheme, mode: "dark", colors: { ...lightTheme.colors, background: "#112233" } });
   await expect(page.locator(".local-terminal")).toHaveCSS(
     "background-color",
     "rgb(18, 52, 86)",
@@ -218,11 +327,11 @@ test("theme updates repaint retained indexed colors and preserve fragmented inpu
   ).toHaveCount(1);
   await expect(page.locator(".local-terminal")).toHaveCSS(
     "background-color",
-    "rgb(0, 0, 0)",
+    "rgb(17, 34, 51)",
   );
   await expect
     .poll(() => h.input.join(""))
-    .toBe("\x1b]11;rgb:0000/0000/0000\x07");
+    .toBe("\x1b]11;rgb:1111/2222/3333\x07");
   expect(h.sockets).toHaveLength(1);
 });
 
@@ -237,19 +346,15 @@ test("corrupt settings and backend persistence failure leave appearance usable",
   await expect(page.locator(".local-terminal")).toHaveCSS("font-size", "14px");
   appState(page).failWrites = true;
   const dialog = await settings(page);
-  await dialog.getByRole("combobox", { name: "Theme" }).selectOption("light");
+  await dialog.getByRole("slider", { name: /Font size/ }).fill("20");
   await expect(page.getByRole("alert").filter({ hasText: "could not be saved" })).toContainText("could not be saved");
-  await expect(page.locator(".local-terminal")).toHaveCSS(
-    "background-color",
-    "rgb(250, 250, 250)",
-  );
+  await expect(page.locator(".local-terminal")).toHaveCSS("font-size", "20px");
   expect(errors).toEqual([]);
 });
 
 test("saved appearance is restored by a later view without browser storage", async ({ page }) => {
   await open(page, "/");
   const dialog = await settings(page);
-  await dialog.getByRole("combobox", { name: "Theme" }).selectOption("light");
   await dialog.getByRole("slider", { name: /Font size/ }).fill("18");
   await flushState(page);
   await page.addInitScript(() => {
@@ -257,5 +362,4 @@ test("saved appearance is restored by a later view without browser storage", asy
   });
   await page.reload();
   await expect(page.locator(".local-terminal")).toHaveCSS("font-size", "18px");
-  await expect(page.locator(".local-terminal")).toHaveCSS("background-color", "rgb(250, 250, 250)");
 });

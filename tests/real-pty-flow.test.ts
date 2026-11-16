@@ -5,8 +5,11 @@ import { setTimeout as delay } from "node:timers/promises";
 import { once } from "node:events";
 import { WebSocket, WebSocketServer } from "ws";
 import * as pty from "node-pty";
-import { PtyOutput } from "../lib/pty-output";
-import { OUTPUT_PENDING_LIMIT, OUTPUT_WINDOW } from "../lib/terminal-protocol";
+import { PtyOutput } from "../server/terminal/output";
+import {
+  OUTPUT_PENDING_LIMIT,
+  OUTPUT_WINDOW,
+} from "../shared/terminal-protocol";
 
 test(
   "real PTY pauses for a stalled receiver, resumes intact, and drains before exit",

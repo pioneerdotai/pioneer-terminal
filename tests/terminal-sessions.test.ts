@@ -3,18 +3,15 @@ import assert from "node:assert/strict";
 import { setImmediate as settle } from "node:timers/promises";
 import { EventEmitter } from "node:events";
 import type { WebSocket } from "ws";
-import {
-  TerminalSessions,
-  type SpawnPty,
-  type TerminalSize,
-} from "../lib/terminal-sessions";
+import { TerminalSessions } from "../server/terminal/sessions";
+import { type SpawnPty, type TerminalSize } from "../server/terminal/types";
 import {
   HANDSHAKE_MS,
   SESSION_GRACE_MS,
   SESSION_LIMIT,
   OUTPUT_WINDOW,
   OUTPUT_PENDING_LIMIT,
-} from "../lib/terminal-protocol";
+} from "../shared/terminal-protocol";
 
 class Socket extends EventEmitter {
   readyState = 1;
@@ -91,6 +88,25 @@ function setup() {
     counts: () => ({ spawns, kills, pauses }),
   };
 }
+
+test("normal view socket closure discards its PTY and reopening starts a new shell", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const h = setup();
+  t.after(() => h.sessions.close());
+  const first = h.attach();
+  const token = first.ready().session;
+  await first.message(size);
+  first.close(1000);
+  assert.equal(h.sessions.size, 0);
+  assert.equal(h.counts().kills, 1);
+  const stale = h.attach(token);
+  assert.equal(stale.code, 4404);
+  const fresh = h.attach();
+  await fresh.message(size);
+  assert.equal(fresh.ready().resumed, false);
+  assert.notEqual(fresh.ready().session, token);
+  assert.equal(h.counts().spawns, 2);
+});
 
 test("users cannot attach to each other's PTYs or interrupt an owner, while same-user reconnect works", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
@@ -486,8 +502,8 @@ test("takeover waits for pending Host acceptance before reporting the input pref
   });
   await next.message({ type: "input", id: 2, data: "new" });
   assert.deepEqual(writes, ["old", "new"]);
-  next.close(1000);
-  assert.equal(sessions.size, 1, "closing a view does not close its PTY");
+  next.close(1006);
+  assert.equal(sessions.size, 1, "a transient disconnect preserves the live PTY");
 });
 
 test("input uses a bounded window while acknowledgments retain a contiguous accepted prefix", async (t) => {

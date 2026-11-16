@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   INITIAL_STATE,
+  workspaceReducer as reduce,
+} from "../features/terminal/workspace/reducer";
+import {
   adjacentPane,
   measureLayout,
   minimumSize,
-  visibleSessions,
-  workspaceReducer as reduce,
-  shellLabel,
-} from "../lib/workspace-layout";
+} from "../features/terminal/workspace/geometry";
+import { visibleSessions } from "../features/terminal/workspace/layout-tree";
+import { shellLabel } from "../features/terminal/workspace/session-label";
 
 const split = () =>
   reduce(INITIAL_STATE, {

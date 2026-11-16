@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { reportedDirectory } from "../lib/working-directory";
+import {
+  reportedDirectory,
+} from "../features/terminal/workspace/working-directory";
 import {
   INITIAL_STATE,
   workspaceReducer as reduce,
-} from "../lib/workspace-layout";
+} from "../features/terminal/workspace/reducer";
 
 test("directory labels retain the reported host and decode paths without resolving dot segments", () => {
   for (const [uri, expected] of [

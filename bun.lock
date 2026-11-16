@@ -5,7 +5,7 @@
     "": {
       "name": "pioneer-terminal",
       "dependencies": {
-        "@pioneercompany/app-sdk": "^0.1.0",
+        "@pioneercompany/app-sdk": "^0.2.0",
         "@tailwindcss/postcss": "^4.3.5",
         "@wterm/core": "0.5.10",
         "@wterm/dom": "0.5.10",
@@ -250,7 +250,7 @@
 
     "@nolyfill/is-core-module": ["@nolyfill/is-core-module@1.0.39", "", {}, "sha512-nn5ozdjYQpUCZlWGuxcJY/KpxkWQs4DcbMCmKojjyrYDEAGy4Ce19NN4v5MduafTwJlbKc99UA8YhSVqq9yPZA=="],
 
-    "@pioneercompany/app-sdk": ["@pioneercompany/app-sdk@0.1.0", "", { "dependencies": { "ws": "^8.18.3" } }, "sha512-j4HOhAae6BduZYRczTquqm8davkby7QaOYkQR56e9jQKXR++E+5vj5M00d+GVi/SMgCzAR3zHwRX3rfNhPze4g=="],
+    "@pioneercompany/app-sdk": ["@pioneercompany/app-sdk@0.2.0", "", { "dependencies": { "ws": "^8.18.3" } }, "sha512-fQlCWCriI0eNGQdlCFXycNiH8Oi6lJGnM9q6YlYl0V4pKmra6gMmWiMmqBCLzpdQJdlqYNzFRUVu460b23uiWQ=="],
 
     "@pkgr/core": ["@pkgr/core@0.3.6", "", {}, "sha512-SEeaJLb3qBNF/OaXnaR1NmmBbFYk1zC0ZH/52fATcRPLFg/p791YrcyFFy44Bo9sLaGuSuLp5Q6axbb/O+v/RA=="],
 

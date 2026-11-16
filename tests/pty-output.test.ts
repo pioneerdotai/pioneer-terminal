@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PtyOutput } from "../lib/pty-output";
+import { PtyOutput } from "../server/terminal/output";
 import {
   OUTPUT_CHUNK,
   OUTPUT_FRAMES,
   OUTPUT_PENDING_FRAMES,
   OUTPUT_PENDING_LIMIT,
   OUTPUT_WINDOW,
-} from "../lib/terminal-protocol";
+} from "../shared/terminal-protocol";
 
 function setup() {
   const chunks: Buffer[] = [];

@@ -4,7 +4,7 @@ export const MAX_FONT_SIZE = 32;
 export interface Appearance {
   fontSize: number;
 }
-export const DEFAULT_APPEARANCE: Appearance = { fontSize: 14 };
+export const DEFAULT_APPEARANCE: Appearance = { fontSize: 13 };
 
 export function readAppearance(value: string | null): Appearance {
   try {

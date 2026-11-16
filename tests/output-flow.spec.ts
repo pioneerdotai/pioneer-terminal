@@ -116,8 +116,7 @@ test("an oversized paste is rejected visibly and typing can continue", async ({
   await expect(terminal).toBeFocused();
   await expect.poll(() => connected).toBe(true);
   await terminal.evaluate((element, limit) => {
-    // Supply deterministic clipboard data; synthetic ClipboardEvent payloads
-    // are restricted in Firefox.
+    // Supply deterministic clipboard data for the oversized-paste scenario.
     const event = new Event("paste", { bubbles: true, cancelable: true });
     Object.defineProperty(event, "clipboardData", {
       value: { getData: () => "x".repeat(limit + 1) },

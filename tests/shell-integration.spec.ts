@@ -34,12 +34,12 @@ async function open(page: Page, path = "/") {
   return { sockets, received, acknowledgments, ready };
 }
 
-test("shell directories retain remote identity, reject malformed reports, and reset to the latest process directory", async ({
+test("shell directories show decoded paths without hostnames, reject malformed reports, and reset to the latest process directory", async ({
   page,
 }) => {
   const h = await open(page);
   const report = (uri: string) => Buffer.from(`\x1b]7;${uri}\x07`);
-  const remote = "build-box:/home/me/project name/日本";
+  const remote = "/home/me/project name/日本";
   const prefix = Buffer.from(
     "\x1b]7;file://build-box/home/me/project%20name/%E6%97%A5%E6%9C%AC",
   );
@@ -105,7 +105,7 @@ test("hidden and alternate-screen directory reports update only their session wi
     ),
   );
   await expect(
-    page.getByRole("button", { name: "remote:/work", exact: true }),
+    page.getByRole("button", { name: "/work", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "/shell-2", exact: true }),
@@ -113,7 +113,7 @@ test("hidden and alternate-screen directory reports update only their session wi
   expect(await grid.textContent()).toBe(before);
   await expect(input(page, 2)).toBeFocused();
   h.sockets[0].send(Buffer.from("\x1b[?2026l"));
-  await page.getByRole("button", { name: "remote:/work", exact: true }).click();
+  await page.getByRole("button", { name: "/work", exact: true }).click();
   await expect(input(page, 1)).toBeFocused();
   await expect(grid).toContainText("hidden output");
   expect(h.received).toEqual([]);

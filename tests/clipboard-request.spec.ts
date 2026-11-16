@@ -146,15 +146,8 @@ test("denied clipboard access keeps the text available for native copy", async (
 
 test("the Copy button writes to the native clipboard during its user gesture", async ({
   page,
-  context,
-  browserName,
 }) => {
   const { socket, terminal, input } = await openTerminal(page, false);
-  // Exercise Chromium's allowed-permission path; denial is covered above.
-  if (browserName === "chromium")
-    await context.grantPermissions(["clipboard-write"], {
-      origin: new URL(page.url()).origin,
-    });
   socket.send(request("native clipboard text"));
   await page.getByRole("button", { name: "Review clipboard request" }).click();
   const dialog = page.getByRole("dialog");

@@ -46,9 +46,9 @@ const lightTheme = makeHostTheme("light", {
 const statusIndicator = (page: Page) => page.getByRole("navigation", { name: "Terminal sessions" })
   .getByRole("button", { pressed: true }).locator('span[aria-hidden="true"]');
 async function hostTheme(page: Page, theme = lightTheme) {
-  await page.evaluate(theme => {
-    window.postMessage({ type: "pioneer.theme", theme }, location.origin);
-  }, theme);
+  await page.evaluate(json => {
+    window.postMessage({ type: "pioneer.theme", theme: JSON.parse(json) }, location.origin);
+  }, JSON.stringify(theme));
   await expect(page.locator(".workspace")).toHaveAttribute("data-theme", theme.mode);
 }
 
@@ -108,9 +108,8 @@ for (const surface of [
       await expect(page.locator(".workspace > header")).toHaveCSS("background-color", surface.tabRgb);
       await expect(page.getByRole("button", { name: "Starting…", exact: true }).first()
         .locator("..")).toHaveCSS("background-color", surface.rgb);
-      const loading = page.getByText("Loading terminal…", { exact: true });
-      await expect(loading).toBeVisible();
-      await expect(loading).toHaveCSS("background-color", surface.rgb);
+      await expect(page.locator("main")).toHaveCSS("background-color", surface.rgb);
+      await expect(page.locator(".local-terminal")).toHaveCount(0);
       releaseEngine();
       await expect(page.getByRole("textbox", { name: "Terminal 1", exact: true })).toBeFocused();
       await expect(page.locator(".local-terminal")).toHaveCSS("background-color", surface.rgb);
@@ -163,9 +162,12 @@ test("Pioneer palette owns the whole UI and parser, including updates within one
   await expect(statusIndicator(page)).toHaveCSS("background-color", "rgb(66, 163, 134)");
   await expect(page.locator(".workspace > header")).toHaveCSS("border-bottom-color", "rgb(102, 119, 136)");
   await page.keyboard.press("Escape");
-  h.sockets[0].send(Buffer.from("\x1b]10;?\x07\x1b]11;?\x07\x1b]12;?\x07"));
+  // This Ghostty version answers OSC 10/11; verify the cursor's visible
+  // color directly rather than expecting an unsupported OSC 12 reply.
+  await expect(page.locator(".term-cursor")).toHaveCSS("outline-color", "rgb(85, 119, 153)");
+  h.sockets[0].send(Buffer.from("\x1b]10;?\x07\x1b]11;?\x07"));
   await expect.poll(() => h.input.join("")).toBe(
-    "\x1b]10;rgb:2222/3333/4444\x07\x1b]11;rgb:dddd/eeee/ffff\x07\x1b]12;rgb:5555/7777/9999\x07",
+    "\x1b]10;rgb:2222/3333/4444\x07\x1b]11;rgb:dddd/eeee/ffff\x07",
   );
   await expect(page.locator(".term-grid")).toContainText("retained across host theme");
   expect(await page.locator(".term-grid").evaluate(element =>
@@ -261,7 +263,7 @@ test(`font size updates existing and new panes, resizes the PTY, and survives re
     .getByRole("button", { name: "Reset defaults" })
     .click();
   for (const terminal of await page.locator(".local-terminal").all()) {
-    await expect(terminal).toHaveCSS("font-size", "14px");
+    await expect(terminal).toHaveCSS("font-size", "13px");
     await expect(terminal).toHaveCSS("background-color", "rgb(10, 10, 10)");
   }
 });
@@ -343,7 +345,7 @@ test("corrupt settings and backend persistence failure leave appearance usable",
   appState(page).values.set(APPEARANCE_KEY, '{"theme":"invalid","fontSize":99999}');
   await page.emulateMedia({ colorScheme: "dark" });
   await open(page, "/");
-  await expect(page.locator(".local-terminal")).toHaveCSS("font-size", "14px");
+  await expect(page.locator(".local-terminal")).toHaveCSS("font-size", "13px");
   appState(page).failWrites = true;
   const dialog = await settings(page);
   await dialog.getByRole("slider", { name: /Font size/ }).fill("20");

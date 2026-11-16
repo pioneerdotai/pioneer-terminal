@@ -66,5 +66,5 @@ test("a later view ignores legacy recovery data and starts a clean shell", async
   await expect.poll(() => h.attachments.length).toBe(2);
   expect(h.attachments[1]).toEqual({ session: null, bytes: 0 });
   await expect(page.locator(".term-grid")).not.toContainText("previous view output");
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.locator(".terminal-app").getByRole("alert")).toHaveCount(0);
 });

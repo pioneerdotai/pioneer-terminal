@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  DEFAULT_APPEARANCE,
   readAppearance,
 } from "../features/terminal/settings/appearance";
 
@@ -15,7 +14,7 @@ test("stored font size is bounded and legacy theme choices do not override the h
     '{"theme":"unknown","fontSize":999}',
     '{"theme":{},"fontSize":"18"}',
   ])
-    assert.deepEqual(readAppearance(value), DEFAULT_APPEARANCE);
+    assert.deepEqual(readAppearance(value), { fontSize: 13 });
   assert.deepEqual(
     readAppearance(
       '{"theme":"light","fontSize":18,"session":"not-a-preference"}',
@@ -23,6 +22,6 @@ test("stored font size is bounded and legacy theme choices do not override the h
     { fontSize: 18 },
   );
   assert.deepEqual(readAppearance('{"theme":"dark","fontSize":14.5}'), {
-    fontSize: 14,
+    fontSize: 13,
   });
 });

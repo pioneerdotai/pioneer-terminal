@@ -22,7 +22,7 @@ async function open(page: Page) {
   await expect.poll(() => sockets.length).toBe(1);
   await terminalReady(sockets[0]);
   await page.evaluate(() => {
-    const target = window as ViewWindow;
+    const target = window as unknown as ViewWindow;
     target.viewRequests = [];
     // Host-side protocol fixture: the application and SDK still handle the
     // actual button action, request creation and acknowledgement delivery.
@@ -39,7 +39,7 @@ async function open(page: Page) {
   return { sockets, shellCommands };
 }
 
-const requests = (page: Page) => page.evaluate(() => (window as ViewWindow).viewRequests);
+const requests = (page: Page) => page.evaluate(() => (window as unknown as ViewWindow).viewRequests);
 
 test("placement preserves mounted sessions and App close terminates them before requesting view closure", async ({ page }) => {
   const h = await open(page);
@@ -122,12 +122,12 @@ test("failed placement is reported inline and the control can be retried", async
   });
   await chooseTerminalAction(page, "Move app to right");
   const button = page.getByRole("button", { name: "Move app to right", exact: true });
-  await expect(page.getByRole("alert")).toHaveText("Could not move this app. Try again.");
+  await expect(page.locator(".terminal-app").getByRole("alert")).toHaveText("Could not move this app. Try again.");
   await expect(button).toBeEnabled();
   await expect(page.getByRole("group", { name: "App placement", exact: true }).getByRole("button", { pressed: true })).toHaveAccessibleName("Expand app");
   await button.click();
   await expect.poll(() => requests(page)).toEqual([{ type: "pioneer.view.setPlacement", placement: "right" }]);
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.locator(".terminal-app").getByRole("alert")).toHaveCount(0);
   await expect(page.locator('[popover]:popover-open')).toHaveCount(0);
   await page.getByRole("button", { name: "Terminal actions", exact: true }).click();
   await expect(button).toHaveAttribute("aria-pressed", "true");

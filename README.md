@@ -65,8 +65,8 @@ The code style is explicit in `.prettierrc.json`: two-space indentation, double
 quotes, semicolons, trailing commas, parenthesized arrow parameters, LF line
 endings, and a target line width of 80 characters.
 
-Browser tests: `bunx playwright install chromium`, then `bun run build` and
-`bun run test:e2e --project=chromium`. Results are saved under `test-results/`.
+Browser tests: `bunx playwright install webkit`, then `bun run build` and
+`bun run test:e2e`. Only WebKit is configured. Results are saved under `test-results/`.
 
 Start with the [project code map](docs/code-organization.md) to find the owner of
 an interface, state, transport or backend change. The stable entry points are
@@ -242,7 +242,7 @@ so loading, parser initialization and the first live frame share one surface.
 Open **Appearance** in the Terminal actions (⋯) menu to choose a font size from
 10 to 32 px. Changes apply to existing, hidden and new panes without restarting
 shells or clearing output. Font changes resize the grid and report its dimensions
-to the PTY. **Reset defaults** restores 14 px. Closing the dialog or pressing
+to the PTY. **Reset defaults** restores 13 px. Closing the dialog or pressing
 Escape returns focus to its opener. Font size is saved through the App backend;
 invalid values fall back to defaults, and persistence failures leave live changes
 usable with a warning.
@@ -356,7 +356,7 @@ A third real-PTY case loses an input acknowledgment and a later input message,
 reattaches through the browser connection class, and verifies that accepted
 input executes once, missing input is not replayed, and new input still works.
 
-Run `bun run build`, then `bun run test:e2e` from this project directory. The browser suite starts an isolated development PTY entry point using a production Next build and uses deterministic WebSocket output without spawning a shell. Chromium, Firefox, and WebKit cover streamed Unicode, synchronized drawing, input during output, buffer overflow, unmounted history, native read-only navigation and Copy, explicit refresh, cancellation, and focus return. Reconnection cases preserve partial UTF-8, alternate screens, synchronized drawing, terminal replies, and focus, reject disconnected input, and report an unavailable session.
+Run `bun run build`, then `bun run test:e2e` from this project directory. The browser suite starts an isolated development PTY entry point using a production Next build and uses deterministic WebSocket output without spawning a shell. WebKit covers streamed Unicode, synchronized drawing, input during output, buffer overflow, unmounted history, native read-only navigation and Copy, explicit refresh, cancellation, and focus return. Reconnection cases preserve partial UTF-8, alternate screens, synchronized drawing, terminal replies, and focus, reject disconnected input, and report an unavailable session.
 
 Terminal controls live in the top bar and act on the focused pane: split right,
 split down, zoom/restore, and Find. Read output, Appearance, and Keyboard

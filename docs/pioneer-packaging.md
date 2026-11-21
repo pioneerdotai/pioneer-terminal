@@ -6,7 +6,7 @@ manager, Microsandbox executable or local PTY addon.
 
 ## Build and delivery
 
-The existing **Prepare Pioneer application** workflow builds native Linux x64 and
+The **Publish Terminal** workflow builds native Linux x64 and
 arm64 payloads with a digest-pinned Node 26 / Debian Trixie builder. Bun installs
 the locked developer dependencies with scripts disabled. Next produces the UI;
 Bun bundles the production custom server. Next's pinned tracer collects its
@@ -93,10 +93,11 @@ checksum. `--target linux-x64` selects amd64 instead. Omitting `--target` retain
 the two-architecture release build. A macOS-native build must not be labelled as
 a Linux payload. Local assembly does not publish or modify a GitHub release.
 
-Pushes to `main` and manual dispatch produce the combined tarball and SHA-256 file
-in the `pioneer-terminal` Actions artifact (30-day retention). Numeric tags without
-`v` also publish both files in GitHub Releases. The `0.1.0` production release uses tag `0.1.0`. Existing published releases
-are immutable; further source changes require a new version/tag.
+Pushing a `vX.Y.Z` tag matching `app.json` produces the combined tarball and
+SHA-256 file in the `pioneer-terminal` Actions artifact (30-day retention) and
+publishes both in a GitHub Release. `app.json` is the only source of the release
+version. The workflow refuses to overwrite published releases; further source
+changes require a new version and tag.
 Do not change source, manifest, lockfile or icons between build and assembly.
 
 Download the packaged release archive, not GitHub's automatic source archive.

@@ -42,7 +42,7 @@ export async function createRuntimePayload(temporary, info) {
   });
   await writeJson(join(runtime, "package.json"), {
     name: info.pkg.name,
-    version: info.pkg.version,
+    version: info.app.version,
     private: true,
     dependencies: {
       next: info.pkg.dependencies.next,

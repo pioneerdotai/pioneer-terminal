@@ -20,27 +20,12 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-      - name: Validate package and release versions
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "26"
+      - name: Validate release tag against app.json
         id: version
-        run: |
-          python3 - <<'PYTHON'
-          import json
-          import os
-          import re
-          from pathlib import Path
-          app = json.loads(Path("app.json").read_text())
-          package = json.loads(Path("package.json").read_text())
-          version = app["version"]
-          if not re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", version) or package["version"] != version:
-              raise SystemExit("App and package versions must match and use x.y.z")
-          tag = os.environ["GITHUB_REF_NAME"]
-          if not re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", tag):
-              raise SystemExit("Release tags must use vX.Y.Z (for example v0.2.0)")
-          if tag != f"v{version}":
-              raise SystemExit("Release tag must match app.json and package.json versions")
-          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              output.write(f"version={version}\n")
-          PYTHON
+        run: node scripts/pioneer/app-version.mjs "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
 
   runtime:
     needs: preflight

@@ -1,6 +1,6 @@
 {
   "name": "Terminal",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "slug": "terminal",
   "license": "MIT",
   "shortDescription": "A terminal with tabs, split panes, and searchable output.",

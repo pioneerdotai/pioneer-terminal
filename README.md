@@ -70,22 +70,23 @@ Browser tests: `bunx playwright install webkit`, then `bun run build` and
 
 ## CI and releases
 
-`Terminal PR` builds the UI and server and runs unit/real-PTY tests and WebKit
-browser tests for pull requests targeting `main`.
+`Terminal PR` checks the `app.json` version, builds the UI and server, and runs
+unit/real-PTY tests and WebKit browser tests for pull requests targeting `main`.
 
-`Publish Terminal` runs independently only when a version tag such as `v0.2.0`
-is pushed. It requires that `app.json` and `package.json` both match the tag's
-`X.Y.Z`, builds Linux x64 and arm64 payloads, verifies the assembled package,
+`Publish Terminal` runs independently only when a version tag such as `v0.4.0`
+is pushed. The tag must be `v` followed by the `version` in the tagged commit's
+`app.json`. The workflow builds Linux x64 and arm64 payloads, verifies the package,
 and publishes the archive and checksum in a GitHub Release. It does not run
 the PR test suite or depend on a successful PR workflow. Pushes and merges
 to `main` do not start either workflow. There is no manual release trigger.
 
-To release, update both version files and `packaging/release-notes.md` in the
-source, then tag the desired commit:
+Set the release version only in `app.json`; the runtime `package.json` gets it
+at build time. Update `packaging/release-notes.md`, commit both files, and push
+the tag for that commit:
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.4.0
+git push origin v0.4.0
 ```
 
 Start with the [project code map](docs/code-organization.md) to find the owner of

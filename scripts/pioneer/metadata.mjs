@@ -1,19 +1,15 @@
 import { cp, lstat, mkdir } from "node:fs/promises";
 import { join, relative } from "node:path";
+import { readAppManifest } from "./app-version.mjs";
 import { json, root } from "./common.mjs";
 import { packagePath } from "./files.mjs";
 
 // Shared manifest and icon metadata; importing it never runs packaging.
 export async function metadata() {
-  const app = await json(join(root, "app.json"));
+  const app = await readAppManifest();
   const pkg = await json(join(root, "package.json"));
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(app.slug) || app.slug.length > 64) {
     throw new Error("Invalid app slug");
-  }
-  if (app.version !== pkg.version || !/^\d+\.\d+\.\d+$/.test(app.version)) {
-    throw new Error(
-      "This developer packager requires matching x.y.z app/package versions",
-    );
   }
   if (app.skills || app.mcp || app.locales) {
     throw new Error(

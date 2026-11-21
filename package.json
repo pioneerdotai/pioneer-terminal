@@ -21,22 +21,22 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@pioneercompany/app-sdk": "^0.2.0",
+    "@pioneercompany/app-sdk": "^0.5.0",
     "@tailwindcss/postcss": "^4.3.5",
-    "@wterm/core": "0.5.10",
-    "@wterm/dom": "0.5.10",
-    "@wterm/ghostty": "0.5.10",
-    "@wterm/react": "0.5.10",
-    "lucide-react": "^1.72.0",
+    "@wterm/core": "0.6.0",
+    "@wterm/dom": "0.6.0",
+    "@wterm/ghostty": "0.6.0",
+    "@wterm/react": "0.6.0",
+    "lucide-react": "^1.77.0",
     "next": "16.4.6",
-    "postcss": "^8.5.9",
+    "postcss": "^8.5.33",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "tailwindcss": "^4.3.5",
-    "ws": "^8.22.2"
+    "ws": "^8.23.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.65.0",
+    "@playwright/test": "^1.65.1",
     "@types/node": "^26.6.6",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
